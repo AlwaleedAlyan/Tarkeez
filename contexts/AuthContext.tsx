@@ -7,7 +7,8 @@ import React, {
   useState,
 } from "react";
 
-import { ApiError, api, setToken } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 export type PhotoTransform = {
   scale: number;
@@ -69,19 +70,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me = await api<MeResponse>("/auth/me");
-        setUser(toUser(me.user));
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
-          await setToken(null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        try {
+          const me = await api<MeResponse>("/auth/me");
+          setUser(toUser(me.user));
+        } catch (e) {
+          setUser(null);
         }
+      } else {
         setUser(null);
-      } finally {
-        setIsLoading(false);
       }
-    })();
+      setIsLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session) {
+          try {
+            const me = await api<MeResponse>("/auth/me");
+            setUser(toUser(me.user));
+          } catch (e) {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -93,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       json: { email: trimmed, password },
       auth: false,
     });
-    await setToken(res.token);
     setUser(toUser(res.user));
   }, []);
 
@@ -112,7 +131,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         json: { name: trimmedName, email: trimmedEmail, password },
         auth: false,
       });
-      await setToken(res.token);
       setUser(toUser(res.user));
     },
     [],
@@ -124,7 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore — clear locally anyway */
     }
-    await setToken(null);
     setUser(null);
   }, []);
 

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Tarkeez",
-    "slug": "tarkeez",
+    "name": "Stymer",
+    "slug": "Stymer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tarkeez",
+    "scheme": "Stymer",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {

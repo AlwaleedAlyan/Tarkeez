@@ -11,7 +11,7 @@ import React, {
 import { Platform } from "react-native";
 
 import { useAuth } from "./AuthContext";
-import { api, fileUrl, getToken } from "@/lib/api";
+import { api, fileUrl } from "@/lib/api";
 
 export type Material = {
   id: string;
@@ -109,20 +109,20 @@ function genId() {
 }
 
 function sessionsKey(userId: string) {
-  return `@tarkeez/sessions/${userId}`;
+  return `@Stymer/sessions/${userId}`;
 }
 function annotationsKey(userId: string, materialId: string) {
-  return `@tarkeez/annos/${userId}/${materialId}`;
+  return `@Stymer/annos/${userId}/${materialId}`;
 }
 
 function cachePath(userId: string, materialId: string): string | null {
   if (!FileSystem.cacheDirectory) return null;
-  return `${FileSystem.cacheDirectory}tarkeez/${userId}/${materialId}.pdf`;
+  return `${FileSystem.cacheDirectory}Stymer/${userId}/${materialId}.pdf`;
 }
 
 async function ensureCacheDir(userId: string) {
   if (!FileSystem.cacheDirectory) return;
-  const dir = `${FileSystem.cacheDirectory}tarkeez/${userId}`;
+  const dir = `${FileSystem.cacheDirectory}Stymer/${userId}`;
   try {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   } catch {
@@ -131,11 +131,8 @@ async function ensureCacheDir(userId: string) {
 }
 
 async function downloadToCache(materialId: string, dest: string) {
-  const token = await getToken();
-  const url = fileUrl(materialId);
-  const result = await FileSystem.downloadAsync(url, dest, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const url = await fileUrl(materialId);
+  const result = await FileSystem.downloadAsync(url, dest);
   if (result.status >= 400) {
     throw new Error(`Could not download file (${result.status})`);
   }
@@ -148,7 +145,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshMaterials = useCallback(async () => {
-    const res = await api<{ materials: ApiMaterial[] }>("/materials");
+    const res = await api<{ materials: ApiMaterial[] }>("/materials/${id}");
     setMaterials(res.materials.map(fromApi));
   }, []);
 

@@ -63,6 +63,9 @@ export default function StudyScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const exitToLibrary = useCallback(() => {
+    router.replace("/(tabs)");
+  }, [router]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
     getMaterial,
@@ -273,7 +276,7 @@ export default function StudyScreen() {
 
   const saveAndExit = useCallback(async () => {
     if (savedRef.current || !material) {
-      router.back();
+      exitToLibrary();
       return;
     }
     savedRef.current = true;
@@ -285,7 +288,7 @@ export default function StudyScreen() {
       await saveAnnotations(material.id, annotationsRef.current);
 
       if (seconds < 5 && pagesRead === 0 && selectionsRef.current === 0) {
-        router.back();
+        exitToLibrary();
         return;
       }
 
@@ -306,7 +309,7 @@ export default function StudyScreen() {
         }),
       ]);
     } finally {
-      router.back();
+      exitToLibrary();
     }
   }, [
     material,
@@ -317,7 +320,7 @@ export default function StudyScreen() {
     recordSession,
     updateMaterial,
     saveAnnotations,
-    router,
+    exitToLibrary,
   ]);
 
   // Unmount safety net
@@ -352,7 +355,7 @@ export default function StudyScreen() {
     const doDelete = async () => {
       savedRef.current = true;
       await deleteMaterial(material.id);
-      router.back();
+      exitToLibrary();
     };
     if (Platform.OS === "web") {
       doDelete();
@@ -410,7 +413,7 @@ export default function StudyScreen() {
           <Text style={{ color: colors.foreground }}>Material not found.</Text>
           <Button
             label="Go back"
-            onPress={() => router.back()}
+            onPress={exitToLibrary}
             variant="ghost"
             style={{ marginTop: 12 }}
           />
@@ -474,7 +477,7 @@ export default function StudyScreen() {
             <Text style={styles.errorMsg}>{loadError}</Text>
             <Button
               label="Go back"
-              onPress={() => router.back()}
+              onPress={exitToLibrary}
               variant="ghost"
               style={{ marginTop: 16 }}
             />

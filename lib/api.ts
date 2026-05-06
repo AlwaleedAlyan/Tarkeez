@@ -45,19 +45,13 @@ export async function api<T = unknown>(
 
   if (path === "/auth/signup" && method === "POST") {
     const { name, email, password } = opts.json as any;
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
     if (error) throw new ApiError(error.message, error.status ?? 400);
     if (!data.user) throw new ApiError("Sign up failed", 400);
-
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert({
-        id: data.user.id,
-        name,
-        email,
-      });
-
-    if (profileError) throw new ApiError(profileError.message, 400);
 
     const { data: profileData, error: fetchError } = await supabase
       .from("profiles")

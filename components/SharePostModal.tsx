@@ -6,6 +6,7 @@ import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Modal,
   Platform,
@@ -27,9 +28,14 @@ type Props = {
   onClose: () => void;
 };
 
-const CARD_W = 480;
-const CARD_H = 270;
-const LOGO = require("../assets/images/tarkeez_logo.png");
+const SCREEN = Dimensions.get("window");
+const RESERVED_V = 200;
+const MAX_W = SCREEN.width - 40;
+const MAX_H = SCREEN.height - RESERVED_V;
+const RATIO = 9 / 16;
+const CARD_W = Math.min(MAX_W, MAX_H * RATIO);
+const CARD_H = CARD_W / RATIO;
+const LOGO = require("../assets/images/stymer_logo.png");
 
 function fmtDuration(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -62,7 +68,7 @@ export function SharePostModal({
     if (Platform.OS === "web") {
       Alert.alert(
         "Sharing on the web",
-        "Open Tarkeez on your phone to share or save this post.",
+        "Open Stymer on your phone to share or save this post.",
       );
       return;
     }
@@ -102,7 +108,7 @@ export function SharePostModal({
       if (!perm.granted) {
         Alert.alert(
           "Permission needed",
-          "Tarkeez needs access to your photos to save the post.",
+          "Stymer needs access to your photos to save the post.",
         );
         return;
       }
@@ -163,11 +169,11 @@ export function SharePostModal({
               style={StyleSheet.absoluteFillObject}
             />
 
-            <View style={styles.statsRow}>
-              <Stat value={fmtDuration(focusedSec)} label="Time" />
-              <View style={[styles.vDivider, { backgroundColor: "#ffffff20" }]} />
+            <View style={styles.statsCol}>
               <Stat value={pagesStudied.toString()} label="Pages" />
-              <View style={[styles.vDivider, { backgroundColor: "#ffffff20" }]} />
+              <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />
+              <Stat value={fmtDuration(focusedSec)} label="Time" />
+              <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />
               <Stat value={`${focusPct}%`} label="Focus" />
             </View>
 
@@ -179,7 +185,7 @@ export function SharePostModal({
                 style={[styles.logo, { tintColor: colors.primary }]}
                 resizeMode="contain"
               />
-              <Text style={styles.brand}>Tarkeez</Text>
+              <Text style={styles.brand}>STYMER</Text>
             </View>
           </View>
         </View>
@@ -247,58 +253,58 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
     paddingHorizontal: 28,
-    paddingVertical: 24,
+    paddingVertical: 36,
     justifyContent: "space-between",
   },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  statBlock: {
+  statsCol: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+    gap: 28,
+  },
+  statBlock: {
+    alignItems: "center",
+    gap: 8,
   },
   statValue: {
     fontFamily: "Inter_700Bold",
-    fontSize: 32,
+    fontSize: 56,
     color: "#ffffff",
-    letterSpacing: -0.8,
+    letterSpacing: -1.2,
   },
   statLabel: {
     fontFamily: "Inter_500Medium",
-    fontSize: 11,
+    fontSize: 13,
     color: "#ffffff",
     opacity: 0.65,
     textTransform: "uppercase",
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
   },
-  vDivider: {
-    width: 1,
-    height: 44,
+  statDivider: {
+    height: 1,
+    width: "55%",
   },
   hDivider: {
     height: 1,
     width: "100%",
-    marginVertical: 10,
+    marginVertical: 12,
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 14,
   },
   logo: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
   },
   brand: {
     fontFamily: "Inter_700Bold",
-    fontSize: 28,
+    fontSize: 32,
     color: "#ffffff",
     letterSpacing: -0.6,
   },

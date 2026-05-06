@@ -145,7 +145,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshMaterials = useCallback(async () => {
-    const res = await api<{ materials: ApiMaterial[] }>("/materials/${id}");
+    const res = await api<{ materials: ApiMaterial[] }>("/materials");
     setMaterials(res.materials.map(fromApi));
   }, []);
 

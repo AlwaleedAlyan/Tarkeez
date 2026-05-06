@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 
+export const MAX_MATERIAL_BYTES = 15 * 1024 * 1024;
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -9,6 +11,10 @@ class ApiError extends Error {
 }
 
 export { ApiError };
+
+function formatMb(bytes: number) {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
 
 type FetchOpts = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
@@ -176,6 +182,13 @@ export async function api<T = unknown>(
       blob = await response.blob();
     } else {
       blob = file as Blob;
+    }
+
+    if (blob.size > MAX_MATERIAL_BYTES) {
+      throw new ApiError(
+        `This PDF is ${formatMb(blob.size)} MB. Materials must be 15 MB or less.`,
+        413,
+      );
     }
 
     const filePath = `${user.id}/${file.name}`;

@@ -66,7 +66,23 @@ materials
 - current_page (integer, default 1)
 - created_at (timestamptz)
 - updated_at (timestamptz)
-- RLS: view ✅ insert ✅ update ✅ delete ✅
+- RLS policies (must exist for upload to work):
+  ```sql
+  alter table public.materials enable row level security;
+
+  create policy materials_select_own on public.materials
+    for select using (auth.uid() = user_id);
+  create policy materials_insert_own on public.materials
+    for insert with check (auth.uid() = user_id);
+  create policy materials_update_own on public.materials
+    for update using (auth.uid() = user_id)
+                with check (auth.uid() = user_id);
+  create policy materials_delete_own on public.materials
+    for delete using (auth.uid() = user_id);
+  ```
+  Verify with:
+  `select policyname, cmd, qual, with_check from pg_policies
+   where schemaname='public' and tablename='materials';`
 
 study_sessions
 - id (uuid, auto generated, primary key)
@@ -93,11 +109,13 @@ mates
 ### Storage
 - Bucket name: materials
 - Visibility: PRIVATE
-- File size limit: 50MB
+- File size limit: 15MB (enforced client-side AND in lib/api.ts;
+  also set the bucket `file_size_limit` in Supabase to 15MB)
 - Allowed MIME types: Any
 - Policies: upload ✅ read ✅ delete ✅
 - Files served via signed URLs (valid 3600 seconds)
 - File path structure: {user_id}/{file_name}
+- Single source of truth for the limit: `MAX_MATERIAL_BYTES` in lib/api.ts
 
 ### How Auth Works
 - lib/supabase.ts initializes Supabase client with AsyncStorage
@@ -105,6 +123,19 @@ mates
 - contexts/AuthContext.tsx restores session via getSession() on mount
 - onAuthStateChange listener keeps user state in sync automatically
 - No manual JWT handling — Supabase manages all tokens automatically
+
+### How Library Persistence Works
+- Materials are stored in the `materials` Postgres table; PDF blobs live in
+  the `materials` Storage bucket at path `{user_id}/{file_name}`.
+- contexts/LibraryContext.tsx auto-loads materials whenever `user` changes
+  (login, app launch with existing session) by calling GET `/materials`,
+  which queries the table filtered by `user_id` (RLS also enforces this).
+- If the user has no materials, the library renders the EmptyState; otherwise
+  it renders the FlatList of MaterialCards. No local seed data — the DB is
+  the source of truth.
+- Local cache: `${cacheDirectory}Stymer/{user_id}/{material_id}.pdf` is a
+  download-on-demand cache populated by `ensureLocalFile()`. Sessions and
+  annotations are stored locally in AsyncStorage (not in the DB).
 
 ## Key Technical Decisions
 - Migrated from custom Express backend to Supabase

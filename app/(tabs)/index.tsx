@@ -20,6 +20,7 @@ import { MaterialCard } from "@/components/MaterialCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { MAX_MATERIAL_BYTES } from "@/lib/api";
 
 export default function LibraryScreen() {
   const colors = useColors();
@@ -44,6 +45,15 @@ export default function LibraryScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       const fileName = asset.name ?? "document.pdf";
+
+      if (typeof asset.size === "number" && asset.size > MAX_MATERIAL_BYTES) {
+        const sizeMb = (asset.size / (1024 * 1024)).toFixed(1);
+        Alert.alert(
+          "File too large",
+          `This PDF is ${sizeMb} MB. Materials must be 15 MB or less.`,
+        );
+        return;
+      }
 
       const m = await addMaterial({
         title: fileName.replace(/\.pdf$/i, ""),

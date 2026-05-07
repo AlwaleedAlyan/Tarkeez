@@ -106,6 +106,28 @@ mates
 - created_at (timestamptz)
 - RLS: view ✅ insert ✅ update ✅ delete ✅
 
+collections
+- id (uuid, primary key, default gen_random_uuid())
+- user_id (uuid, references auth.users on delete cascade)
+- name (text, not null)
+- created_at (timestamptz, default now())
+- RLS: select/insert/update/delete all gated on
+  `auth.uid() = user_id` (mirrors the materials policy pattern)
+
+collection_materials  (many-to-many join: a material can live in N
+collections at once; a collection can hold many materials)
+- collection_id (uuid, references collections on delete cascade)
+- material_id  (uuid, references materials   on delete cascade)
+- added_at     (timestamptz, default now())
+- primary key  (collection_id, material_id) — prevents duplicates
+- index on material_id for "which collections is this material in?"
+- RLS:
+  - select / delete: gated on owning the parent collection
+    (`exists(... where c.id = collection_id and c.user_id = auth.uid())`)
+  - insert: gated on owning the parent collection ONLY — the user
+    does NOT need to own the material being attached. Forward-
+    compatible with future mate-shared materials.
+
 ### Storage
 - Bucket name: materials
 - Visibility: PRIVATE
@@ -127,12 +149,18 @@ mates
 ### How Library Persistence Works
 - Materials are stored in the `materials` Postgres table; PDF blobs live in
   the `materials` Storage bucket at path `{user_id}/{file_name}`.
-- contexts/LibraryContext.tsx auto-loads materials whenever `user` changes
-  (login, app launch with existing session) by calling GET `/materials`,
-  which queries the table filtered by `user_id` (RLS also enforces this).
-- If the user has no materials, the library renders the EmptyState; otherwise
-  it renders the FlatList of MaterialCards. No local seed data — the DB is
-  the source of truth.
+- contexts/LibraryContext.tsx auto-loads materials, collections, and
+  collection-material join rows whenever `user` changes (login, app launch
+  with existing session) by calling GET `/materials`, `/collections`, and
+  `/collection-materials`. RLS scopes everything to the current user.
+- The library top-level renders only **uncategorized** materials —
+  `materials.filter(m => !cmRows.some(r => r.materialId === m.id))`,
+  surfaced by the context as `uncategorizedMaterials`. Materials in any
+  collection are reachable only via the collection detail screen.
+- Collections render as a horizontal strip above the uncategorized list.
+  Tapping one navigates to `app/collection/[id].tsx`.
+- The empty state shows only when both `collections` and
+  `uncategorizedMaterials` are empty.
 - Local cache: `${cacheDirectory}Stymer/{user_id}/{material_id}.pdf` is a
   download-on-demand cache populated by `ensureLocalFile()`. Sessions and
   annotations are stored locally in AsyncStorage (not in the DB).

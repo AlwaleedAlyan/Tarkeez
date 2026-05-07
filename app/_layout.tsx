@@ -37,6 +37,13 @@ function RootLayoutNav() {
         }}
       />
       <Stack.Screen
+        name="collection/[id]"
+        options={{
+          presentation: "card",
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
         name="settings"
         options={{
           presentation: "card",

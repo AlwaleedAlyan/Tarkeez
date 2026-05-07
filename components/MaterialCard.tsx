@@ -10,6 +10,7 @@ type Props = {
   material: Material;
   sessions: Session[];
   onPress: () => void;
+  onMenuPress?: () => void;
 };
 
 function fmtMinutes(totalSec: number) {
@@ -19,7 +20,12 @@ function fmtMinutes(totalSec: number) {
   return `${m}m`;
 }
 
-export function MaterialCard({ material, sessions, onPress }: Props) {
+export function MaterialCard({
+  material,
+  sessions,
+  onPress,
+  onMenuPress,
+}: Props) {
   const colors = useColors();
 
   const stats = useMemo(() => {
@@ -94,6 +100,24 @@ export function MaterialCard({ material, sessions, onPress }: Props) {
         ) : null}
       </View>
 
+      {onMenuPress ? (
+        <Pressable
+          onPress={onMenuPress}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.menuBtn,
+            { opacity: pressed ? 0.5 : 1 },
+          ]}
+          accessibilityLabel="Material options"
+        >
+          <Feather
+            name="more-vertical"
+            size={20}
+            color={colors.mutedForeground}
+          />
+        </Pressable>
+      ) : null}
+
       <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
     </Pressable>
   );
@@ -145,5 +169,12 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 2,
+  },
+  menuBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

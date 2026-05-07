@@ -302,6 +302,122 @@ export async function api<T = unknown>(
     }
   }
 
+  if (path === "/collections" && method === "GET") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { data, error } = await supabase
+      .from("collections")
+      .select("id, name, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw new ApiError(error.message, 400);
+    const collections = data.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      createdAt: c.created_at,
+    }));
+    return { collections } as T;
+  }
+
+  if (path === "/collections" && method === "POST") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { name } = opts.json as any;
+    const trimmed = (name ?? "").toString().trim();
+    if (!trimmed) throw new ApiError("Name is required", 400);
+    const { data, error } = await supabase
+      .from("collections")
+      .insert({ user_id: user.id, name: trimmed })
+      .select()
+      .single();
+    if (error) throw new ApiError(error.message, 400);
+    return {
+      collection: {
+        id: data.id,
+        name: data.name,
+        createdAt: data.created_at,
+      },
+    } as T;
+  }
+
+  const collectionMatch = path.match(/^\/collections\/([^/]+)$/);
+  if (collectionMatch) {
+    const id = collectionMatch[1];
+    if (method === "PATCH") {
+      const { name } = opts.json as any;
+      const trimmed = (name ?? "").toString().trim();
+      if (!trimmed) throw new ApiError("Name is required", 400);
+      const { data, error } = await supabase
+        .from("collections")
+        .update({ name: trimmed })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw new ApiError(error.message, 400);
+      return {
+        collection: {
+          id: data.id,
+          name: data.name,
+          createdAt: data.created_at,
+        },
+      } as T;
+    }
+    if (method === "DELETE") {
+      const { error } = await supabase
+        .from("collections")
+        .delete()
+        .eq("id", id);
+      if (error) throw new ApiError(error.message, 400);
+      return {} as T;
+    }
+  }
+
+  if (path === "/collection-materials" && method === "GET") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { data, error } = await supabase
+      .from("collection_materials")
+      .select("collection_id, material_id, added_at");
+    if (error) throw new ApiError(error.message, 400);
+    const rows = data.map((r: any) => ({
+      collectionId: r.collection_id,
+      materialId: r.material_id,
+      addedAt: r.added_at,
+    }));
+    return { rows } as T;
+  }
+
+  if (path === "/collection-materials" && method === "POST") {
+    const { collectionId, materialId } = opts.json as any;
+    if (!collectionId || !materialId)
+      throw new ApiError("collectionId and materialId required", 400);
+    const { error } = await supabase
+      .from("collection_materials")
+      .insert({ collection_id: collectionId, material_id: materialId });
+    if (error && (error as any).code !== "23505") {
+      throw new ApiError(error.message, 400);
+    }
+    return {} as T;
+  }
+
+  const cmMatch = path.match(/^\/collection-materials\/([^/]+)\/([^/]+)$/);
+  if (cmMatch && method === "DELETE") {
+    const [, collectionId, materialId] = cmMatch;
+    const { error } = await supabase
+      .from("collection_materials")
+      .delete()
+      .eq("collection_id", collectionId)
+      .eq("material_id", materialId);
+    if (error) throw new ApiError(error.message, 400);
+    return {} as T;
+  }
+
   throw new ApiError(`Unhandled route: ${method} ${path}`, 404);
 }
 

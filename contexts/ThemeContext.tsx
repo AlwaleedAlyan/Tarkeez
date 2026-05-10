@@ -30,7 +30,7 @@ const DEFAULT_PREFS: AppPrefs = {
   notifications: true,
 };
 
-const PREFS_KEY = "@tarkeez/prefs";
+const PREFS_KEY = "@stymer/prefs";
 
 type ThemeContextType = {
   prefs: AppPrefs;

@@ -490,9 +490,9 @@ export function buildViewerHtml(input: ViewerInput) {
   }
 
   // Expose to native
-  window.__tarkeezSetTool = setTool;
-  window.__tarkeezClearPage = clearPage;
-  window.__tarkeezGetCurrentPage = function() { return currentPage; };
+  window.__stymerSetTool = setTool;
+  window.__stymerClearPage = clearPage;
+  window.__stymerGetCurrentPage = function() { return currentPage; };
 })();
 </script>
 </body></html>`;

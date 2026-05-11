@@ -34,7 +34,6 @@ type Props = {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onAddPage?: () => void;
 };
 
 export function DrawingToolbar({
@@ -48,12 +47,13 @@ export function DrawingToolbar({
   onRedo,
   canUndo,
   canRedo,
-  onAddPage,
 }: Props) {
   const colors = useColors();
   const [popover, setPopover] = useState<"color" | "size" | null>(null);
 
   const closePopover = () => setPopover(null);
+
+  const pickersDisabled = tool === "eraser" || tool === "lasso";
 
   const TOOL_BTNS: { tool: DrawingTool; icon: React.ReactNode }[] = [
     {
@@ -74,6 +74,12 @@ export function DrawingToolbar({
       tool: "eraser",
       icon: (
         <Feather name="x-circle" size={18} color={iconColor(tool, "eraser", colors)} />
+      ),
+    },
+    {
+      tool: "lasso",
+      icon: (
+        <Feather name="crop" size={18} color={iconColor(tool, "lasso", colors)} />
       ),
     },
   ];
@@ -187,13 +193,13 @@ export function DrawingToolbar({
 
         <Pressable
           onPress={() => {
-            if (tool === "eraser") return;
+            if (pickersDisabled) return;
             setPopover((p) => (p === "color" ? null : "color"));
           }}
-          disabled={tool === "eraser"}
+          disabled={pickersDisabled}
           style={({ pressed }) => [
             styles.toolBtn,
-            { opacity: tool === "eraser" ? 0.4 : pressed ? 0.7 : 1 },
+            { opacity: pickersDisabled ? 0.4 : pressed ? 0.7 : 1 },
           ]}
           accessibilityLabel="Color picker"
         >
@@ -209,10 +215,14 @@ export function DrawingToolbar({
         </Pressable>
 
         <Pressable
-          onPress={() => setPopover((p) => (p === "size" ? null : "size"))}
+          onPress={() => {
+            if (pickersDisabled) return;
+            setPopover((p) => (p === "size" ? null : "size"));
+          }}
+          disabled={pickersDisabled}
           style={({ pressed }) => [
             styles.toolBtn,
-            { opacity: pressed ? 0.7 : 1 },
+            { opacity: pickersDisabled ? 0.4 : pressed ? 0.7 : 1 },
           ]}
           accessibilityLabel="Stroke size"
         >
@@ -254,18 +264,6 @@ export function DrawingToolbar({
           <Feather name="rotate-cw" size={18} color={colors.foreground} />
         </Pressable>
 
-        {onAddPage ? (
-          <Pressable
-            onPress={onAddPage}
-            style={({ pressed }) => [
-              styles.toolBtn,
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-            accessibilityLabel="Add page"
-          >
-            <Feather name="file-plus" size={18} color={colors.foreground} />
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );

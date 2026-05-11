@@ -1,7 +1,11 @@
+import { Feather } from "@expo/vector-icons";
 import {
   Canvas,
+  Circle,
   Fill,
+  Group,
   Path,
+  Rect,
   Skia,
   type SkPath,
 } from "@shopify/react-native-skia";
@@ -14,15 +18,27 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
+import { useColors } from "@/hooks/useColors";
 import type { Stroke } from "@/contexts/LibraryContext";
+import {
+  applyToStroke,
+  bboxOfStrokes,
+  compose,
+  strokeInLasso,
+  type BBox,
+  type Point,
+} from "@/lib/strokeTransform";
 
 const ERASER_RADIUS = 14;
 const HISTORY_LIMIT = 50;
+const GROW_THRESHOLD = 120;
+const LASSO_COLOR = "#3D7AE5";
+const HANDLE_RADIUS = 6;
 
-export type DrawingTool = "pen" | "highlighter" | "eraser";
+export type DrawingTool = "pen" | "highlighter" | "eraser" | "lasso";
 
 type Props = {
   strokes: Stroke[];
@@ -40,7 +56,14 @@ export type DrawingCanvasHandle = {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
-  addPage: () => void;
+  clearSelection: () => void;
+};
+
+type LiveTransform = {
+  tx: number;
+  ty: number;
+  scale: number;
+  rotation: number;
 };
 
 function skPathFromStroke(s: Stroke): SkPath {
@@ -54,6 +77,17 @@ function skPathFromStroke(s: Stroke): SkPath {
   for (let i = 1; i < s.points.length; i++) {
     p.lineTo(s.points[i].x, s.points[i].y);
   }
+  return p;
+}
+
+function skPathFromPolygon(points: Point[], close: boolean): SkPath {
+  const p = Skia.Path.Make();
+  if (points.length === 0) return p;
+  p.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    p.lineTo(points[i].x, points[i].y);
+  }
+  if (close) p.close();
   return p;
 }
 
@@ -108,27 +142,65 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
     },
     ref,
   ) {
-    const [pages, setPages] = useState(1);
+    const colors = useColors();
+
+    const [contentHeight, setContentHeight] = useState(
+      Math.max(viewportHeight, 1),
+    );
     const [scrollY, setScrollY] = useState(0);
     const [inProgress, setInProgress] = useState<Stroke | null>(null);
 
-    useEffect(() => {
-      if (viewportHeight <= 0) return;
-      const need = Math.max(1, Math.ceil(maxStrokeY(strokes) / viewportHeight));
-      if (need > pages) setPages(need);
-    }, [strokes, viewportHeight, pages]);
+    const [lassoPath, setLassoPath] = useState<Point[] | null>(null);
+    const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
+      () => new Set(),
+    );
+    const [liveTransform, setLiveTransform] = useState<LiveTransform | null>(
+      null,
+    );
 
     const inProgressRef = useRef<Stroke | null>(null);
     const scrollYRef = useRef(0);
     scrollYRef.current = scrollY;
-
     const scrollBaseRef = useRef(0);
+
+    const lassoPathRef = useRef<Point[] | null>(null);
+    lassoPathRef.current = lassoPath;
+
+    const selectedIndicesRef = useRef<Set<number>>(selectedIndices);
+    selectedIndicesRef.current = selectedIndices;
+
+    const liveTransformRef = useRef<LiveTransform | null>(null);
+    liveTransformRef.current = liveTransform;
+
+    const pivotRef = useRef<Point>({ x: 0, y: 0 });
+    const activeTransformsRef = useRef(0);
 
     const historyRef = useRef<Stroke[][]>([]);
     const futureRef = useRef<Stroke[][]>([]);
 
-    const canvasHeight = pages * Math.max(viewportHeight, 1);
-    const minScrollY = Math.min(0, viewportHeight - canvasHeight);
+    // --- Vertical Continuous: auto-grow content height ---
+    useEffect(() => {
+      if (viewportHeight <= 0) return;
+      const needed = maxStrokeY(strokes) + viewportHeight;
+      setContentHeight((c) => (c < needed ? needed : c));
+    }, [strokes, viewportHeight]);
+
+    useEffect(() => {
+      if (viewportHeight <= 0) return;
+      setContentHeight((c) => Math.max(c, viewportHeight));
+    }, [viewportHeight]);
+
+    const ensureRoom = useCallback(
+      (targetY: number) => {
+        if (viewportHeight <= 0) return;
+        setContentHeight((c) =>
+          targetY > c - GROW_THRESHOLD ? targetY + viewportHeight : c,
+        );
+      },
+      [viewportHeight],
+    );
+
+    const minScrollY = Math.min(0, viewportHeight - contentHeight);
 
     const clampScrollY = useCallback(
       (y: number) => {
@@ -138,6 +210,30 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       },
       [minScrollY],
     );
+
+    // --- Selection bookkeeping ---
+    const selectedStrokes = useMemo(
+      () => strokes.filter((_, i) => selectedIndices.has(i)),
+      [strokes, selectedIndices],
+    );
+
+    const selectionBBox = useMemo<BBox | null>(
+      () => bboxOfStrokes(selectedStrokes),
+      [selectedStrokes],
+    );
+
+    const selectionBBoxRef = useRef<BBox | null>(selectionBBox);
+    selectionBBoxRef.current = selectionBBox;
+
+    // Clear selection when switching away from lasso.
+    useEffect(() => {
+      if (tool !== "lasso") {
+        setSelectedIndices((prev) => (prev.size === 0 ? prev : new Set()));
+        setLassoPath(null);
+        setLiveTransform(null);
+        activeTransformsRef.current = 0;
+      }
+    }, [tool]);
 
     const commit = useCallback(
       (next: Stroke[]) => {
@@ -159,30 +255,27 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           if (!prev) return;
           futureRef.current.push(strokes);
           onStrokesChange(prev);
+          setSelectedIndices(new Set());
         },
         redo: () => {
           const next = futureRef.current.pop();
           if (!next) return;
           historyRef.current.push(strokes);
           onStrokesChange(next);
+          setSelectedIndices(new Set());
         },
         canUndo: () => historyRef.current.length > 0,
         canRedo: () => futureRef.current.length > 0,
-        addPage: () => {
-          setPages((p) => p + 1);
-          if (viewportHeight > 0) {
-            setScrollY((y) => {
-              const newCanvasH = (pages + 1) * viewportHeight;
-              const minY = Math.min(0, viewportHeight - newCanvasH);
-              const target = -(newCanvasH - viewportHeight);
-              return Math.max(minY, target);
-            });
-          }
+        clearSelection: () => {
+          setSelectedIndices(new Set());
+          setLassoPath(null);
+          setLiveTransform(null);
         },
       }),
-      [strokes, onStrokesChange, pages, viewportHeight],
+      [strokes, onStrokesChange],
     );
 
+    // --- Draw gesture (pen / highlighter / eraser) ---
     const drawGesture = useMemo(
       () =>
         Gesture.Pan()
@@ -208,6 +301,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             };
             inProgressRef.current = fresh;
             setInProgress(fresh);
+            ensureRoom(cy);
           })
           .onUpdate((e) => {
             const cx = e.x;
@@ -229,6 +323,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             };
             inProgressRef.current = next;
             setInProgress(next);
+            ensureRoom(cy);
           })
           .onEnd(() => {
             const cur = inProgressRef.current;
@@ -242,9 +337,151 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             inProgressRef.current = null;
             setInProgress(null);
           }),
-      [strokes, tool, color, width, commit],
+      [strokes, tool, color, width, commit, ensureRoom],
     );
 
+    // --- Lasso draw gesture (build the lasso polygon) ---
+    const lassoDrawGesture = useMemo(
+      () =>
+        Gesture.Pan()
+          .runOnJS(true)
+          .minPointers(1)
+          .maxPointers(1)
+          .averageTouches(true)
+          .onBegin((e) => {
+            const p = { x: e.x, y: e.y - scrollYRef.current };
+            lassoPathRef.current = [p];
+            setLassoPath([p]);
+          })
+          .onUpdate((e) => {
+            const cur = lassoPathRef.current;
+            if (!cur) return;
+            const p = { x: e.x, y: e.y - scrollYRef.current };
+            const last = cur[cur.length - 1];
+            if (last && Math.abs(last.x - p.x) < 1 && Math.abs(last.y - p.y) < 1) {
+              return;
+            }
+            const next = [...cur, p];
+            lassoPathRef.current = next;
+            setLassoPath(next);
+          })
+          .onEnd(() => {
+            const poly = lassoPathRef.current ?? [];
+            lassoPathRef.current = null;
+            setLassoPath(null);
+            if (poly.length < 3) {
+              setSelectedIndices(new Set());
+              return;
+            }
+            const next = new Set<number>();
+            strokes.forEach((s, i) => {
+              if (strokeInLasso(s, poly)) next.add(i);
+            });
+            setSelectedIndices(next);
+          })
+          .onFinalize(() => {
+            lassoPathRef.current = null;
+            setLassoPath(null);
+          }),
+      [strokes],
+    );
+
+    // --- Transform gestures (pan / pinch / rotate the selection) ---
+    const startTransform = useCallback(() => {
+      if (activeTransformsRef.current === 0) {
+        const bbox = selectionBBoxRef.current;
+        if (!bbox) return;
+        pivotRef.current = {
+          x: (bbox.minX + bbox.maxX) / 2,
+          y: (bbox.minY + bbox.maxY) / 2,
+        };
+        setLiveTransform({ tx: 0, ty: 0, scale: 1, rotation: 0 });
+      }
+      activeTransformsRef.current += 1;
+    }, []);
+
+    const endTransform = useCallback(() => {
+      activeTransformsRef.current = Math.max(
+        0,
+        activeTransformsRef.current - 1,
+      );
+      if (activeTransformsRef.current !== 0) return;
+      const lt = liveTransformRef.current;
+      if (!lt) return;
+      const sel = selectedIndicesRef.current;
+      const pivot = pivotRef.current;
+      const m = compose(lt.tx, lt.ty, lt.scale, lt.rotation, pivot.x, pivot.y);
+      const next = strokes.map((s, i) =>
+        sel.has(i) ? applyToStroke(m, s) : s,
+      );
+      setLiveTransform(null);
+      commit(next);
+    }, [strokes, commit]);
+
+    const transformPan = useMemo(
+      () =>
+        Gesture.Pan()
+          .runOnJS(true)
+          .onBegin(startTransform)
+          .onUpdate((e) => {
+            setLiveTransform((lt) =>
+              lt ? { ...lt, tx: e.translationX, ty: e.translationY } : lt,
+            );
+          })
+          .onEnd(endTransform)
+          .onFinalize(() => {
+            // onEnd already handles the normal exit; only safeguard if state desyncs.
+          }),
+      [startTransform, endTransform],
+    );
+
+    const transformPinch = useMemo(
+      () =>
+        Gesture.Pinch()
+          .runOnJS(true)
+          .onBegin(startTransform)
+          .onUpdate((e) => {
+            setLiveTransform((lt) => (lt ? { ...lt, scale: e.scale } : lt));
+          })
+          .onEnd(endTransform),
+      [startTransform, endTransform],
+    );
+
+    const transformRotation = useMemo(
+      () =>
+        Gesture.Rotation()
+          .runOnJS(true)
+          .onBegin(startTransform)
+          .onUpdate((e) => {
+            setLiveTransform((lt) =>
+              lt ? { ...lt, rotation: e.rotation } : lt,
+            );
+          })
+          .onEnd(endTransform),
+      [startTransform, endTransform],
+    );
+
+    const tapToDeselect = useMemo(
+      () =>
+        Gesture.Tap()
+          .runOnJS(true)
+          .onEnd((e) => {
+            const bbox = selectionBBoxRef.current;
+            if (!bbox) return;
+            const p = { x: e.x, y: e.y - scrollYRef.current };
+            const inside =
+              p.x >= bbox.minX &&
+              p.x <= bbox.maxX &&
+              p.y >= bbox.minY &&
+              p.y <= bbox.maxY;
+            if (!inside) {
+              setSelectedIndices(new Set());
+            }
+          }),
+      [],
+    );
+
+    // --- Scroll gesture (2-finger) ---
     const scrollGesture = useMemo(
       () =>
         Gesture.Pan()
@@ -257,16 +494,43 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           .onUpdate((e) => {
             const next = clampScrollY(scrollBaseRef.current + e.translationY);
             setScrollY(next);
+            // Grow if scrolled near bottom.
+            const bottomVisible = viewportHeight - next;
+            if (bottomVisible > contentHeight - GROW_THRESHOLD) {
+              ensureRoom(bottomVisible);
+            }
           }),
-      [clampScrollY],
+      [clampScrollY, contentHeight, ensureRoom, viewportHeight],
     );
 
-    const composed = useMemo(
-      () => Gesture.Race(drawGesture, scrollGesture),
-      [drawGesture, scrollGesture],
-    );
+    // --- Composed gesture (depends on mode) ---
+    const hasSelection = selectedIndices.size > 0;
+    const composed = useMemo(() => {
+      if (tool !== "lasso") {
+        return Gesture.Race(drawGesture, scrollGesture);
+      }
+      if (!hasSelection) {
+        // Scroll first so 2-finger scroll still works even in lasso mode.
+        return Gesture.Race(scrollGesture, lassoDrawGesture);
+      }
+      return Gesture.Race(
+        Gesture.Simultaneous(transformPan, transformPinch, transformRotation),
+        tapToDeselect,
+      );
+    }, [
+      tool,
+      hasSelection,
+      drawGesture,
+      scrollGesture,
+      lassoDrawGesture,
+      transformPan,
+      transformPinch,
+      transformRotation,
+      tapToDeselect,
+    ]);
 
-    const committedPaths = useMemo(
+    // --- Render helpers ---
+    const pathBundles = useMemo(
       () => strokes.map((s) => ({ s, path: skPathFromStroke(s) })),
       [strokes],
     );
@@ -275,6 +539,62 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       () => (inProgress ? skPathFromStroke(inProgress) : null),
       [inProgress],
     );
+
+    const lassoSkPath = useMemo(
+      () => (lassoPath && lassoPath.length > 1 ? skPathFromPolygon(lassoPath, false) : null),
+      [lassoPath],
+    );
+
+    const liveTransformProps = useMemo(() => {
+      if (!liveTransform) return undefined;
+      const { tx, ty, scale, rotation } = liveTransform;
+      const px = pivotRef.current.x;
+      const py = pivotRef.current.y;
+      return [
+        { translateX: tx },
+        { translateY: ty },
+        { translateX: px },
+        { translateY: py },
+        { rotate: rotation },
+        { scale },
+        { translateX: -px },
+        { translateY: -py },
+      ];
+    }, [liveTransform]);
+
+    // Action bar position (viewport coords). Hide while user is actively transforming.
+    const actionBar = (() => {
+      if (!hasSelection || !selectionBBox || liveTransform) return null;
+      const barWidth = 56;
+      const barHeight = 36;
+      const desiredTop = selectionBBox.minY + scrollY - barHeight - 10;
+      const top = Math.max(8, desiredTop);
+      const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
+      const left = Math.max(
+        8,
+        Math.min(viewportWidth - barWidth - 8, centerX - barWidth / 2),
+      );
+      return { top, left, barWidth, barHeight };
+    })();
+
+    const onDeleteSelection = useCallback(() => {
+      const sel = selectedIndicesRef.current;
+      if (sel.size === 0) return;
+      const next = strokes.filter((_, i) => !sel.has(i));
+      setSelectedIndices(new Set());
+      setLassoPath(null);
+      setLiveTransform(null);
+      commit(next);
+    }, [strokes, commit]);
+
+    const corners: Point[] = selectionBBox
+      ? [
+          { x: selectionBBox.minX, y: selectionBBox.minY },
+          { x: selectionBBox.maxX, y: selectionBBox.minY },
+          { x: selectionBBox.maxX, y: selectionBBox.maxY },
+          { x: selectionBBox.minX, y: selectionBBox.maxY },
+        ]
+      : [];
 
     return (
       <View style={[styles.container, { backgroundColor: background }]}>
@@ -287,24 +607,70 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
                 left: 0,
                 top: 0,
                 width: viewportWidth,
-                height: canvasHeight,
+                height: contentHeight,
                 transform: [{ translateY: scrollY }],
               }}
             >
-              <Canvas style={{ width: viewportWidth, height: canvasHeight }}>
+              <Canvas style={{ width: viewportWidth, height: contentHeight }}>
                 <Fill color={background} />
-                {committedPaths.map(({ s, path }, i) => (
-                  <Path
-                    key={i}
-                    path={path}
-                    color={s.color}
-                    style="stroke"
-                    strokeWidth={s.width}
-                    strokeCap="round"
-                    strokeJoin="round"
-                    opacity={s.kind === "highlighter" ? 0.32 : 1}
-                  />
-                ))}
+                {/* Unselected strokes */}
+                {pathBundles.map(({ s, path }, i) =>
+                  selectedIndices.has(i) ? null : (
+                    <Path
+                      key={i}
+                      path={path}
+                      color={s.color}
+                      style="stroke"
+                      strokeWidth={s.width}
+                      strokeCap="round"
+                      strokeJoin="round"
+                      opacity={s.kind === "highlighter" ? 0.32 : 1}
+                    />
+                  ),
+                )}
+                {/* Selected strokes (wrapped in live transform) */}
+                {selectedIndices.size > 0 ? (
+                  <Group transform={liveTransformProps}>
+                    {pathBundles.map(({ s, path }, i) =>
+                      selectedIndices.has(i) ? (
+                        <Path
+                          key={i}
+                          path={path}
+                          color={s.color}
+                          style="stroke"
+                          strokeWidth={s.width}
+                          strokeCap="round"
+                          strokeJoin="round"
+                          opacity={s.kind === "highlighter" ? 0.32 : 1}
+                        />
+                      ) : null,
+                    )}
+                    {selectionBBox ? (
+                      <>
+                        <Rect
+                          x={selectionBBox.minX}
+                          y={selectionBBox.minY}
+                          width={selectionBBox.maxX - selectionBBox.minX}
+                          height={selectionBBox.maxY - selectionBBox.minY}
+                          color={LASSO_COLOR}
+                          style="stroke"
+                          strokeWidth={1.5}
+                          opacity={0.7}
+                        />
+                        {corners.map((c, i) => (
+                          <Circle
+                            key={i}
+                            cx={c.x}
+                            cy={c.y}
+                            r={HANDLE_RADIUS}
+                            color={LASSO_COLOR}
+                          />
+                        ))}
+                      </>
+                    ) : null}
+                  </Group>
+                ) : null}
+                {/* In-progress stroke (pen / highlighter) */}
                 {inProgressPath && inProgress ? (
                   <Path
                     path={inProgressPath}
@@ -316,10 +682,46 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
                     opacity={inProgress.kind === "highlighter" ? 0.32 : 1}
                   />
                 ) : null}
+                {/* Lasso polygon (in-progress) */}
+                {lassoSkPath ? (
+                  <Path
+                    path={lassoSkPath}
+                    color={LASSO_COLOR}
+                    style="stroke"
+                    strokeWidth={1.5}
+                    opacity={0.9}
+                  />
+                ) : null}
               </Canvas>
             </View>
           </View>
         </GestureDetector>
+
+        {actionBar ? (
+          <View
+            pointerEvents="box-none"
+            style={StyleSheet.absoluteFill}
+          >
+            <Pressable
+              onPress={onDeleteSelection}
+              style={({ pressed }) => [
+                styles.actionBar,
+                {
+                  top: actionBar.top,
+                  left: actionBar.left,
+                  width: actionBar.barWidth,
+                  height: actionBar.barHeight,
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+              accessibilityLabel="Delete selection"
+            >
+              <Feather name="trash-2" size={18} color={colors.destructive} />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     );
   },
@@ -328,4 +730,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: "hidden" },
   flex: { flex: 1, overflow: "hidden" },
+  actionBar: {
+    position: "absolute",
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

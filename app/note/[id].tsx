@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
 import React, {
   useCallback,
   useEffect,
@@ -40,6 +41,7 @@ import {
 import { useLibrary, type Stroke } from "@/contexts/LibraryContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { exportNoteToPdf } from "@/lib/exportNotePdf";
 
 const AUTOSAVE_DELAY_MS = 600;
 const INACTIVITY_DRAW_MS = 30_000;
@@ -342,6 +344,62 @@ export default function NoteScreen() {
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+  const onExportPdf = useCallback(async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("Export PDF", "Available on iOS and Android.");
+      return;
+    }
+    if (!note || !id || exporting) return;
+    setExporting(true);
+    try {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        try {
+          await updateNote(id, { title, contentHtml: content });
+        } catch {
+          /* keep going; export uses in-memory state */
+        }
+      }
+      try {
+        await flushNoteStrokes(id);
+      } catch {
+        /* keep going */
+      }
+      const uri = await exportNoteToPdf({
+        title,
+        contentHtml: content,
+        drawingStrokes: strokes,
+        createdAt: note.createdAt,
+      });
+      const ok = await Sharing.isAvailableAsync();
+      if (!ok) {
+        Alert.alert("Sharing unavailable", `Saved to ${uri}`);
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        UTI: "com.adobe.pdf",
+        dialogTitle: title || "Note",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not export.";
+      Alert.alert("Export failed", msg);
+    } finally {
+      setExporting(false);
+    }
+  }, [
+    note,
+    id,
+    exporting,
+    title,
+    content,
+    strokes,
+    updateNote,
+    flushNoteStrokes,
+  ]);
+
   const onBodyLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     setBodySize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
@@ -417,6 +475,22 @@ export default function NoteScreen() {
             colors={colors}
           />
         </View>
+
+        <Pressable
+          onPress={onExportPdf}
+          hitSlop={10}
+          disabled={exporting}
+          style={({ pressed }) => [
+            styles.iconBtn,
+            {
+              backgroundColor: colors.secondary,
+              opacity: exporting ? 0.4 : pressed ? 0.6 : 1,
+            },
+          ]}
+          accessibilityLabel="Export as PDF"
+        >
+          <Feather name="share" size={18} color={colors.foreground} />
+        </Pressable>
 
         <Pressable
           onPress={onDelete}
@@ -599,7 +673,6 @@ export default function NoteScreen() {
               }}
               canUndo={undoCount > 0}
               canRedo={redoCount > 0}
-              onAddPage={() => canvasRef.current?.addPage()}
             />
           )}
         </View>

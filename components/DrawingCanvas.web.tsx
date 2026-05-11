@@ -5,7 +5,7 @@ import { useColors } from "@/hooks/useColors";
 
 import type { Stroke } from "@/contexts/LibraryContext";
 
-export type DrawingTool = "pen" | "highlighter" | "eraser";
+export type DrawingTool = "pen" | "highlighter" | "eraser" | "lasso";
 
 type Props = {
   strokes: Stroke[];
@@ -23,7 +23,7 @@ export type DrawingCanvasHandle = {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
-  addPage: () => void;
+  clearSelection: () => void;
 };
 
 export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
@@ -37,7 +37,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
         redo: () => {},
         canUndo: () => false,
         canRedo: () => false,
-        addPage: () => {},
+        clearSelection: () => {},
       }),
       [],
     );

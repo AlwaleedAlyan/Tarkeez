@@ -23,7 +23,8 @@ import { useColors } from "@/hooks/useColors";
 
 type Props = {
   focusedSec: number;
-  pagesStudied: number;
+  metricLabel: string;
+  metricValue: number;
   focusPct: number;
   onClose: () => void;
 };
@@ -47,7 +48,8 @@ function fmtDuration(sec: number) {
 
 export function SharePostModal({
   focusedSec,
-  pagesStudied,
+  metricLabel,
+  metricValue,
   focusPct,
   onClose,
 }: Props) {
@@ -170,7 +172,7 @@ export function SharePostModal({
             />
 
             <View style={styles.statsCol}>
-              <Stat value={pagesStudied.toString()} label="Pages" />
+              <Stat value={metricValue.toString()} label={metricLabel} />
               <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />
               <Stat value={fmtDuration(focusedSec)} label="Time" />
               <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />

@@ -383,32 +383,40 @@ export async function api<T = unknown>(
     if (!user) throw new ApiError("Not authenticated", 401);
     const { data, error } = await supabase
       .from("collection_materials")
-      .select("collection_id, material_id, added_at");
+      .select("collection_id, material_id, note_id, added_at");
     if (error) throw new ApiError(error.message, 400);
     const rows = data.map((r: any) => ({
       collectionId: r.collection_id,
-      materialId: r.material_id,
+      materialId: r.material_id ?? null,
+      noteId: r.note_id ?? null,
       addedAt: r.added_at,
     }));
     return { rows } as T;
   }
 
   if (path === "/collection-materials" && method === "POST") {
-    const { collectionId, materialId } = opts.json as any;
-    if (!collectionId || !materialId)
-      throw new ApiError("collectionId and materialId required", 400);
+    const { collectionId, materialId, noteId } = opts.json as any;
+    if (!collectionId || (!materialId && !noteId))
+      throw new ApiError("collectionId and one of materialId/noteId required", 400);
+    if (materialId && noteId)
+      throw new ApiError("Provide only one of materialId or noteId", 400);
+    const insertRow: any = { collection_id: collectionId };
+    if (materialId) insertRow.material_id = materialId;
+    else insertRow.note_id = noteId;
     const { error } = await supabase
       .from("collection_materials")
-      .insert({ collection_id: collectionId, material_id: materialId });
+      .insert(insertRow);
     if (error && (error as any).code !== "23505") {
       throw new ApiError(error.message, 400);
     }
     return {} as T;
   }
 
-  const cmMatch = path.match(/^\/collection-materials\/([^/]+)\/([^/]+)$/);
-  if (cmMatch && method === "DELETE") {
-    const [, collectionId, materialId] = cmMatch;
+  const cmMaterialMatch = path.match(
+    /^\/collection-materials\/material\/([^/]+)\/([^/]+)$/,
+  );
+  if (cmMaterialMatch && method === "DELETE") {
+    const [, collectionId, materialId] = cmMaterialMatch;
     const { error } = await supabase
       .from("collection_materials")
       .delete()
@@ -418,30 +426,312 @@ export async function api<T = unknown>(
     return {} as T;
   }
 
+  const cmNoteMatch = path.match(
+    /^\/collection-materials\/note\/([^/]+)\/([^/]+)$/,
+  );
+  if (cmNoteMatch && method === "DELETE") {
+    const [, collectionId, noteId] = cmNoteMatch;
+    const { error } = await supabase
+      .from("collection_materials")
+      .delete()
+      .eq("collection_id", collectionId)
+      .eq("note_id", noteId);
+    if (error) throw new ApiError(error.message, 400);
+    return {} as T;
+  }
+
+  if (path === "/sessions" && method === "GET") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { data, error } = await supabase
+      .from("study_sessions")
+      .select(
+        "id, material_id, note_id, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+      )
+      .eq("user_id", user.id)
+      .order("started_at", { ascending: false });
+    if (error) throw new ApiError(error.message, 400);
+    const sessions = data.map((s: any) => ({
+      id: s.id,
+      materialId: s.material_id ?? null,
+      noteId: s.note_id ?? null,
+      startedAt: Number(s.started_at),
+      endedAt: Number(s.ended_at),
+      durationSec: s.duration_sec,
+      pausedSec: s.paused_sec ?? 0,
+      pagesRead: s.pages_read ?? null,
+      pageTimes: s.page_times ?? null,
+      selections: s.selections ?? null,
+      wordsAdded: s.words_added ?? null,
+      keystrokes: s.keystrokes ?? null,
+      strokesAdded: s.strokes_added ?? null,
+      createdAt: s.created_at,
+    }));
+    return { sessions } as T;
+  }
+
+  if (path === "/sessions" && method === "POST") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const body = (opts.json ?? {}) as any;
+    const session = body.session ?? body;
+    if (!session?.id) throw new ApiError("session.id required", 400);
+    if (!session.materialId && !session.noteId)
+      throw new ApiError("materialId or noteId required", 400);
+    if (session.materialId && session.noteId)
+      throw new ApiError("Provide only one of materialId or noteId", 400);
+    const insertRow: any = {
+      id: session.id,
+      user_id: user.id,
+      material_id: session.materialId ?? null,
+      note_id: session.noteId ?? null,
+      started_at: session.startedAt,
+      ended_at: session.endedAt,
+      duration_sec: session.durationSec,
+      paused_sec: session.pausedSec ?? 0,
+      pages_read: session.pagesRead ?? null,
+      page_times: session.pageTimes ?? null,
+      selections: session.selections ?? null,
+      words_added: session.wordsAdded ?? null,
+      keystrokes: session.keystrokes ?? null,
+      strokes_added: session.strokesAdded ?? null,
+    };
+    const { data, error } = await supabase
+      .from("study_sessions")
+      .insert(insertRow)
+      .select(
+        "id, material_id, note_id, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+      )
+      .single();
+    if (error) throw new ApiError(error.message, 400);
+    return {
+      session: {
+        id: data.id,
+        materialId: data.material_id ?? null,
+        noteId: data.note_id ?? null,
+        startedAt: Number(data.started_at),
+        endedAt: Number(data.ended_at),
+        durationSec: data.duration_sec,
+        pausedSec: data.paused_sec ?? 0,
+        pagesRead: data.pages_read ?? null,
+        pageTimes: data.page_times ?? null,
+        selections: data.selections ?? null,
+        wordsAdded: data.words_added ?? null,
+        keystrokes: data.keystrokes ?? null,
+        strokesAdded: data.strokes_added ?? null,
+        createdAt: data.created_at,
+      },
+    } as T;
+  }
+
+  if (path === "/notes" && method === "GET") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { data, error } = await supabase
+      .from("notes")
+      .select(
+        "id, title, content_html, drawing_strokes, created_at, updated_at",
+      )
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    if (error) throw new ApiError(error.message, 400);
+    const notes = data.map((n: any) => ({
+      id: n.id,
+      title: n.title,
+      contentHtml: n.content_html ?? "",
+      drawingStrokes: Array.isArray(n.drawing_strokes) ? n.drawing_strokes : [],
+      createdAt: n.created_at,
+      updatedAt: n.updated_at,
+    }));
+    return { notes } as T;
+  }
+
+  if (path === "/notes" && method === "POST") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new ApiError("Not authenticated", 401);
+    const { title, contentHtml, drawingStrokes } = (opts.json ?? {}) as any;
+    const insertRow: any = { user_id: user.id };
+    if (title !== undefined) insertRow.title = title;
+    if (contentHtml !== undefined) insertRow.content_html = contentHtml;
+    if (drawingStrokes !== undefined)
+      insertRow.drawing_strokes = drawingStrokes;
+    const { data, error } = await supabase
+      .from("notes")
+      .insert(insertRow)
+      .select(
+        "id, title, content_html, drawing_strokes, created_at, updated_at",
+      )
+      .single();
+    if (error) throw new ApiError(error.message, 400);
+    return {
+      note: {
+        id: data.id,
+        title: data.title,
+        contentHtml: data.content_html ?? "",
+        drawingStrokes: Array.isArray(data.drawing_strokes)
+          ? data.drawing_strokes
+          : [],
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      },
+    } as T;
+  }
+
+  const noteMatch = path.match(/^\/notes\/([^/]+)$/);
+  if (noteMatch) {
+    const id = noteMatch[1];
+    if (method === "PATCH") {
+      const patch = (opts.json ?? {}) as any;
+      const updateRow: any = { updated_at: new Date().toISOString() };
+      if (patch.title !== undefined) updateRow.title = patch.title;
+      if (patch.contentHtml !== undefined)
+        updateRow.content_html = patch.contentHtml;
+      if (patch.drawingStrokes !== undefined)
+        updateRow.drawing_strokes = patch.drawingStrokes;
+      const { data, error } = await supabase
+        .from("notes")
+        .update(updateRow)
+        .eq("id", id)
+        .select(
+          "id, title, content_html, drawing_strokes, created_at, updated_at",
+        )
+        .single();
+      if (error) throw new ApiError(error.message, 400);
+      return {
+        note: {
+          id: data.id,
+          title: data.title,
+          contentHtml: data.content_html ?? "",
+          drawingStrokes: Array.isArray(data.drawing_strokes)
+            ? data.drawing_strokes
+            : [],
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        },
+      } as T;
+    }
+    if (method === "DELETE") {
+      const { error } = await supabase.from("notes").delete().eq("id", id);
+      if (error) throw new ApiError(error.message, 400);
+      return {} as T;
+    }
+  }
+
   throw new ApiError(`Unhandled route: ${method} ${path}`, 404);
 }
 
-export async function fileUrl(materialId: string): Promise<string> {
+// --- Avatars (profile photos) ---
+//
+// New uploads go through `uploadAvatar` and are stored at
+//   avatars/{user_id}/avatar.<ext>
+// The path (not the URL) is what gets persisted into `profiles.photo_uri`.
+// `resolveAvatarUri` signs a stored path on read so the Avatar component
+// always renders a real, fresh URL. Legacy `file://` and `http(s)://`
+// values are passed through unchanged for backwards compatibility.
+
+const AVATAR_BUCKET = "avatars";
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+function avatarExtFromMime(mime?: string | null): string {
+  switch ((mime ?? "").toLowerCase()) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/jpeg":
+    case "image/jpg":
+    default:
+      return "jpg";
+  }
+}
+
+export async function uploadAvatar(
+  localUri: string,
+  mimeType?: string,
+): Promise<string> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new ApiError("Not authenticated", 401);
 
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  if (blob.size > MAX_AVATAR_BYTES) {
+    throw new ApiError(
+      `Photo is ${(blob.size / (1024 * 1024)).toFixed(1)} MB. Avatars must be 5 MB or less.`,
+      413,
+    );
+  }
+
+  const ext = avatarExtFromMime(mimeType ?? blob.type);
+  const path = `${user.id}/avatar.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, blob, {
+      contentType: mimeType ?? blob.type ?? "image/jpeg",
+      upsert: true,
+    });
+  if (uploadError) throw new ApiError(uploadError.message, 400);
+  return path;
+}
+
+export async function avatarUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .createSignedUrl(path, 3600);
+  if (error || !data)
+    throw new ApiError(error?.message ?? "Failed to sign avatar", 400);
+  return data.signedUrl;
+}
+
+export async function deleteAvatar(path: string): Promise<void> {
+  await supabase.storage.from(AVATAR_BUCKET).remove([path]).catch(() => {});
+}
+
+export async function resolveAvatarUri(
+  stored: string | null | undefined,
+): Promise<string | null> {
+  if (!stored) return null;
+  if (stored.startsWith("http://") || stored.startsWith("https://"))
+    return stored;
+  if (stored.startsWith("file://")) return stored; // legacy device-local
+  try {
+    return await avatarUrl(stored);
+  } catch {
+    return null;
+  }
+}
+
+export async function fileUrl(materialId: string): Promise<string> {
   const { data: material, error: fetchError } = await supabase
     .from("materials")
-    .select("file_name")
+    .select("user_id, file_name")
     .eq("id", materialId)
     .single();
 
   if (fetchError) throw new ApiError(fetchError.message, 400);
+  if (!material) throw new ApiError("Material not found", 404);
 
-  const filePath = `${user.id}/${material.file_name}`;
+  const filePath = `${material.user_id}/${material.file_name}`;
   const { data, error } = await supabase.storage
     .from("materials")
     .createSignedUrl(filePath, 3600);
 
-  if (error || !data)
-    throw new ApiError(error?.message ?? "Failed to get signed URL", 400);
+  if (error || !data) {
+    throw new ApiError(
+      `Could not sign URL for ${filePath}: ${error?.message ?? "no data"}`,
+      400,
+    );
+  }
 
   return data.signedUrl;
 }

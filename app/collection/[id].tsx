@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -13,12 +13,24 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
-import { CollectionPickerModal } from "@/components/CollectionPickerModal";
+import {
+  CollectionPickerModal,
+  type PickerTarget,
+} from "@/components/CollectionPickerModal";
 import { EmptyState } from "@/components/EmptyState";
 import { MaterialCard } from "@/components/MaterialCard";
 import { NameInputModal } from "@/components/NameInputModal";
-import { useLibrary } from "@/contexts/LibraryContext";
+import { NoteCard } from "@/components/NoteCard";
+import {
+  useLibrary,
+  type Material,
+  type Note,
+} from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+
+type CollectionItem =
+  | { kind: "material"; createdAt: number; m: Material }
+  | { kind: "note"; createdAt: number; n: Note };
 
 export default function CollectionDetailScreen() {
   const colors = useColors();
@@ -28,16 +40,17 @@ export default function CollectionDetailScreen() {
   const {
     collections,
     materialsInCollection,
+    notesInCollection,
     sessions,
     deleteMaterial,
+    deleteNote,
     deleteCollection,
     updateCollection,
     removeMaterialFromCollection,
+    removeNoteFromCollection,
   } = useLibrary();
 
-  const [pickerForMaterial, setPickerForMaterial] = useState<string | null>(
-    null,
-  );
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
 
   const exitToLibrary = useCallback(() => {
@@ -46,6 +59,24 @@ export default function CollectionDetailScreen() {
 
   const collection = collections.find((c) => c.id === id);
   const materials = id ? materialsInCollection(id) : [];
+  const notes = id ? notesInCollection(id) : [];
+
+  const items: CollectionItem[] = useMemo(() => {
+    const merged: CollectionItem[] = [
+      ...materials.map((m) => ({
+        kind: "material" as const,
+        createdAt: m.createdAt,
+        m,
+      })),
+      ...notes.map((n) => ({
+        kind: "note" as const,
+        createdAt: n.createdAt,
+        n,
+      })),
+    ];
+    merged.sort((a, b) => b.createdAt - a.createdAt);
+    return merged;
+  }, [materials, notes]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 24;
@@ -105,7 +136,8 @@ export default function CollectionDetailScreen() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Add to collection…",
-        onPress: () => setPickerForMaterial(materialId),
+        onPress: () =>
+          setPickerTarget({ kind: "material", id: materialId }),
       },
       {
         text: "Remove from this collection",
@@ -139,6 +171,52 @@ export default function CollectionDetailScreen() {
       doDelete();
     } else {
       Alert.alert(`Delete "${title}"?`, "This removes the PDF and its sessions.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: doDelete },
+      ]);
+    }
+  };
+
+  const onNoteMenu = (noteId: string, title: string) => {
+    Alert.alert(title || "Untitled", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add to collection…",
+        onPress: () => setPickerTarget({ kind: "note", id: noteId }),
+      },
+      {
+        text: "Remove from this collection",
+        onPress: async () => {
+          try {
+            await removeNoteFromCollection(noteId, collection.id);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Could not remove.";
+            Alert.alert("Remove failed", msg);
+          }
+        },
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => confirmDeleteNote(noteId, title),
+      },
+    ]);
+  };
+
+  const confirmDeleteNote = (noteId: string, title: string) => {
+    const doDelete = async () => {
+      try {
+        await deleteNote(noteId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not delete.";
+        Alert.alert("Delete failed", msg);
+      }
+    };
+    const label = title || "Untitled";
+    if (Platform.OS === "web") {
+      doDelete();
+    } else {
+      Alert.alert(`Delete "${label}"?`, "This permanently removes the note.", [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: doDelete },
       ]);
@@ -202,9 +280,11 @@ export default function CollectionDetailScreen() {
       </View>
 
       <FlatList
-        data={materials}
-        keyExtractor={(m) => m.id}
-        scrollEnabled={materials.length > 0}
+        data={items}
+        keyExtractor={(item) =>
+          item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
+        }
+        scrollEnabled={items.length > 0}
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 8,
@@ -216,25 +296,33 @@ export default function CollectionDetailScreen() {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="folder"
-              title="No materials yet"
-              description="Add a PDF to this collection from the ⋮ menu on any material."
+              title="Nothing in this collection yet"
+              description="Add a PDF or note to this collection from the ⋮ menu."
             />
           </View>
         }
-        renderItem={({ item }) => (
-          <MaterialCard
-            material={item}
-            sessions={sessions}
-            onPress={() => router.push(`/study/${item.id}`)}
-            onMenuPress={() => onMaterialMenu(item.id, item.title)}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.kind === "material" ? (
+            <MaterialCard
+              material={item.m}
+              sessions={sessions}
+              onPress={() => router.push(`/study/${item.m.id}`)}
+              onMenuPress={() => onMaterialMenu(item.m.id, item.m.title)}
+            />
+          ) : (
+            <NoteCard
+              note={item.n}
+              onPress={() => router.push(`/note/${item.n.id}`)}
+              onMenuPress={() => onNoteMenu(item.n.id, item.n.title)}
+            />
+          )
+        }
       />
 
-      {pickerForMaterial ? (
+      {pickerTarget ? (
         <CollectionPickerModal
-          materialId={pickerForMaterial}
-          onClose={() => setPickerForMaterial(null)}
+          target={pickerTarget}
+          onClose={() => setPickerTarget(null)}
         />
       ) : null}
 

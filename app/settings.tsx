@@ -25,6 +25,7 @@ import { ACCENT_LIST, type AccentName, type ThemeMode } from "@/constants/themes
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { uploadAvatar } from "@/lib/api";
 
 type EditField = null | "name" | "email" | "password";
 
@@ -50,6 +51,9 @@ export default function SettingsScreen() {
   const [editing, setEditing] = useState<EditField>(null);
   const [busy, setBusy] = useState(false);
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingPhotoMime, setPendingPhotoMime] = useState<string | undefined>(
+    undefined,
+  );
 
   const topPad = Platform.OS === "web" ? 16 : insets.top;
   const bottomPad = Platform.OS === "web" ? 24 : insets.bottom + 16;
@@ -87,7 +91,9 @@ export default function SettingsScreen() {
         quality: 0.85,
       });
       if (result.canceled || !result.assets?.[0]) return;
-      setPendingPhotoUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      setPendingPhotoUri(asset.uri);
+      setPendingPhotoMime(asset.mimeType ?? undefined);
     } catch (e) {
       showError(e instanceof Error ? e.message : "Could not update photo.");
     }
@@ -97,11 +103,13 @@ export default function SettingsScreen() {
     if (!pendingPhotoUri) return;
     try {
       setBusy(true);
+      const storedPath = await uploadAvatar(pendingPhotoUri, pendingPhotoMime);
       await updateProfile({
-        photoUri: pendingPhotoUri,
+        photoUri: storedPath,
         photoTransform: crop,
       });
       setPendingPhotoUri(null);
+      setPendingPhotoMime(undefined);
     } catch (e) {
       showError(e instanceof Error ? e.message : "Could not save photo.");
     } finally {

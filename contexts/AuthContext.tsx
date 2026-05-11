@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, resolveAvatarUri } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
 export type PhotoTransform = {
@@ -20,7 +20,12 @@ export type User = {
   id: string;
   name: string;
   email: string;
+  // Renderable URL (a signed Supabase URL, a legacy file:// from a single-device
+  // upload, or undefined). Avatar consumers should use this directly.
   photoUri?: string;
+  // The raw value stored in profiles.photo_uri — the storage path for new
+  // uploads. Kept so we can re-sign on a timer and clean up on removal.
+  photoPath?: string;
   photoTransform?: PhotoTransform;
 };
 
@@ -44,12 +49,15 @@ type ApiUser = {
 type AuthResponse = { token: string; user: ApiUser };
 type MeResponse = { user: ApiUser };
 
-function toUser(u: ApiUser): User {
+async function toUser(u: ApiUser): Promise<User> {
+  const path = u.photoUri ?? null;
+  const resolved = await resolveAvatarUri(path);
   return {
     id: u.id,
     name: u.name,
     email: u.email,
-    photoUri: u.photoUri ?? undefined,
+    photoUri: resolved ?? undefined,
+    photoPath: path ?? undefined,
     photoTransform: u.photoTransform ?? undefined,
   };
 }
@@ -74,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         try {
           const me = await api<MeResponse>("/auth/me");
-          setUser(toUser(me.user));
+          setUser(await toUser(me.user));
         } catch (e) {
           setUser(null);
         }
@@ -89,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session) {
           try {
             const me = await api<MeResponse>("/auth/me");
-            setUser(toUser(me.user));
+            setUser(await toUser(me.user));
           } catch (e) {
             setUser(null);
           }
@@ -104,6 +112,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Re-sign the avatar URL before its 1 h TTL expires so long-lived sessions
+  // don't end up rendering a stale URL. Only relevant when the stored value is
+  // a Supabase storage path (resolveAvatarUri leaves http/file URIs alone).
+  useEffect(() => {
+    const path = user?.photoPath;
+    if (!path) return;
+    if (path.startsWith("http://") || path.startsWith("https://")) return;
+    if (path.startsWith("file://")) return;
+    const id = setInterval(
+      async () => {
+        try {
+          const next = await resolveAvatarUri(path);
+          if (!next) return;
+          setUser((prev) =>
+            prev && prev.photoPath === path
+              ? { ...prev, photoUri: next }
+              : prev,
+          );
+        } catch {
+          /* leave the previous URL in place — next refresh will retry */
+        }
+      },
+      50 * 60 * 1000,
+    );
+    return () => clearInterval(id);
+  }, [user?.photoPath]);
+
   const login = useCallback(async (email: string, password: string) => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !password)
@@ -113,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       json: { email: trimmed, password },
       auth: false,
     });
-    setUser(toUser(res.user));
+    setUser(await toUser(res.user));
   }, []);
 
   const signup = useCallback(
@@ -131,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         json: { name: trimmedName, email: trimmedEmail, password },
         auth: false,
       });
-      setUser(toUser(res.user));
+      setUser(await toUser(res.user));
     },
     [],
   );
@@ -160,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: "PATCH",
       json: body,
     });
-    setUser(toUser(res.user));
+    setUser(await toUser(res.user));
   }, []);
 
   const value = useMemo(

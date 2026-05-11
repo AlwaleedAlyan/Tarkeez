@@ -84,6 +84,7 @@ export default function StudyScreen() {
     null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [pausedSec, setPausedSec] = useState(0);
   const [pauseReason, setPauseReason] = useState<PauseReason>(null);
@@ -108,7 +109,7 @@ export default function StudyScreen() {
   const savedRef = useRef<boolean>(false);
   const webViewRef = useRef<WebView>(null);
 
-  // Load PDF + annotations
+  // Load PDF + annotations. Re-runs when loadAttempt increments (Retry button).
   useEffect(() => {
     let cancelled = false;
     if (!material) return;
@@ -116,6 +117,7 @@ export default function StudyScreen() {
       setLoadError("PDF viewing requires Expo Go on a phone.");
       return;
     }
+    setLoadError(null);
     (async () => {
       try {
         const localUri = await ensureLocalFile(material.id);
@@ -139,7 +141,7 @@ export default function StudyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [material, loadAnnotations, ensureLocalFile]);
+  }, [material, loadAnnotations, ensureLocalFile, loadAttempt]);
 
   const isRunning = pauseReason === null;
 
@@ -299,6 +301,7 @@ export default function StudyScreen() {
         }),
         recordSession({
           materialId: material.id,
+          noteId: null,
           startedAt: startedAtRef.current,
           endedAt,
           durationSec: seconds,
@@ -334,6 +337,7 @@ export default function StudyScreen() {
       savedRef.current = true;
       void recordSession({
         materialId: material.id,
+        noteId: null,
         startedAt: startedAtRef.current,
         endedAt,
         durationSec: seconds,
@@ -475,12 +479,23 @@ export default function StudyScreen() {
             <Feather name="alert-circle" size={32} color="#faf7f2" />
             <Text style={styles.errorTitle}>Could not open this PDF</Text>
             <Text style={styles.errorMsg}>{loadError}</Text>
-            <Button
-              label="Go back"
-              onPress={exitToLibrary}
-              variant="ghost"
-              style={{ marginTop: 16 }}
-            />
+            <View
+              style={{ flexDirection: "row", gap: 12, marginTop: 16 }}
+            >
+              <Button
+                label="Retry"
+                onPress={() => {
+                  setBase64(null);
+                  setLoadError(null);
+                  setLoadAttempt((n) => n + 1);
+                }}
+              />
+              <Button
+                label="Go back"
+                onPress={exitToLibrary}
+                variant="ghost"
+              />
+            </View>
           </View>
         ) : !html ? (
           <View style={styles.center}>

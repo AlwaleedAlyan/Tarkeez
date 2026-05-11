@@ -37,7 +37,7 @@ export default function ProfileScreen() {
 
   const totals = useMemo(() => {
     const totalSec = sessions.reduce((s, x) => s + x.durationSec, 0);
-    const pages = sessions.reduce((s, x) => s + x.pagesRead, 0);
+    const pages = sessions.reduce((s, x) => s + (x.pagesRead ?? 0), 0);
     const days = new Set(
       sessions.map((s) => new Date(s.startedAt).toDateString()),
     ).size;

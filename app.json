@@ -14,9 +14,12 @@
       "backgroundColor": "#faf7f2"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stymer.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.stymer.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

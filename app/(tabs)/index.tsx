@@ -2,10 +2,11 @@ import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,14 +17,27 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
 import { CollectionCard } from "@/components/CollectionCard";
-import { CollectionPickerModal } from "@/components/CollectionPickerModal";
+import {
+  CollectionPickerModal,
+  type PickerTarget,
+} from "@/components/CollectionPickerModal";
 import { EmptyState } from "@/components/EmptyState";
 import { MaterialCard } from "@/components/MaterialCard";
 import { NameInputModal } from "@/components/NameInputModal";
+import { NoteCard } from "@/components/NoteCard";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLibrary, type Collection } from "@/contexts/LibraryContext";
+import {
+  useLibrary,
+  type Collection,
+  type Material,
+  type Note,
+} from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
 import { MAX_MATERIAL_BYTES } from "@/lib/api";
+
+type LibraryItem =
+  | { kind: "material"; createdAt: number; m: Material }
+  | { kind: "note"; createdAt: number; n: Note };
 
 export default function LibraryScreen() {
   const colors = useColors();
@@ -33,21 +47,25 @@ export default function LibraryScreen() {
   const {
     collections,
     uncategorizedMaterials,
+    uncategorizedNotes,
     materialsInCollection,
+    notesInCollection,
     sessions,
     addMaterial,
     deleteMaterial,
     createCollection,
     updateCollection,
+    createNote,
+    deleteNote,
   } = useLibrary();
   const [importing, setImporting] = useState(false);
+  const [creatingNote, setCreatingNote] = useState(false);
   const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editingCollection, setEditingCollection] = useState<Collection | null>(
     null,
   );
-  const [pickerForMaterial, setPickerForMaterial] = useState<string | null>(
-    null,
-  );
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -94,12 +112,25 @@ export default function LibraryScreen() {
     }
   };
 
-  const openAddMenu = () => {
-    Alert.alert("Add to library", undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Import PDF", onPress: onPickPdf },
-      { text: "New collection", onPress: () => setNameModalOpen(true) },
-    ]);
+  const onCreateNote = async () => {
+    if (creatingNote) return;
+    setCreatingNote(true);
+    try {
+      const n = await createNote();
+      router.push(`/note/${n.id}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not create note.";
+      Alert.alert("Create failed", msg);
+    } finally {
+      setCreatingNote(false);
+    }
+  };
+
+  const openAddMenu = () => setAddMenuOpen(true);
+
+  const runFromMenu = (action: () => void) => {
+    setAddMenuOpen(false);
+    action();
   };
 
   const onCreateCollection = async (name: string) => {
@@ -129,17 +160,18 @@ export default function LibraryScreen() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Add to collection…",
-        onPress: () => setPickerForMaterial(materialId),
+        onPress: () =>
+          setPickerTarget({ kind: "material", id: materialId }),
       },
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => confirmDelete(materialId, title),
+        onPress: () => confirmDeleteMaterial(materialId, title),
       },
     ]);
   };
 
-  const confirmDelete = (materialId: string, title: string) => {
+  const confirmDeleteMaterial = (materialId: string, title: string) => {
     const doDelete = async () => {
       try {
         await deleteMaterial(materialId);
@@ -158,14 +190,70 @@ export default function LibraryScreen() {
     }
   };
 
+  const onNoteMenu = (noteId: string, title: string) => {
+    Alert.alert(title || "Untitled", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add to collection…",
+        onPress: () => setPickerTarget({ kind: "note", id: noteId }),
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => confirmDeleteNote(noteId, title),
+      },
+    ]);
+  };
+
+  const confirmDeleteNote = (noteId: string, title: string) => {
+    const doDelete = async () => {
+      try {
+        await deleteNote(noteId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not delete.";
+        Alert.alert("Delete failed", msg);
+      }
+    };
+    const label = title || "Untitled";
+    if (Platform.OS === "web") {
+      doDelete();
+    } else {
+      Alert.alert(`Delete "${label}"?`, "This permanently removes the note.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: doDelete },
+      ]);
+    }
+  };
+
+  const items: LibraryItem[] = useMemo(() => {
+    const merged: LibraryItem[] = [
+      ...uncategorizedMaterials.map((m) => ({
+        kind: "material" as const,
+        createdAt: m.createdAt,
+        m,
+      })),
+      ...uncategorizedNotes.map((n) => ({
+        kind: "note" as const,
+        createdAt: n.createdAt,
+        n,
+      })),
+    ];
+    merged.sort((a, b) => b.createdAt - a.createdAt);
+    return merged;
+  }, [uncategorizedMaterials, uncategorizedNotes]);
+
   const showEmptyState =
-    collections.length === 0 && uncategorizedMaterials.length === 0;
+    collections.length === 0 &&
+    uncategorizedMaterials.length === 0 &&
+    uncategorizedNotes.length === 0;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <FlatList
-        data={uncategorizedMaterials}
-        keyExtractor={(m) => m.id}
+        data={items}
+        keyExtractor={(item) =>
+          item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
+        }
         scrollEnabled={!showEmptyState}
         contentContainerStyle={{
           paddingTop: topPad + 16,
@@ -223,7 +311,10 @@ export default function LibraryScreen() {
                   renderItem={({ item }) => (
                     <CollectionCard
                       collection={item}
-                      count={materialsInCollection(item.id).length}
+                      count={
+                        materialsInCollection(item.id).length +
+                        notesInCollection(item.id).length
+                      }
                       onPress={() => router.push(`/collection/${item.id}`)}
                       onLongPress={() => setEditingCollection(item)}
                     />
@@ -232,7 +323,7 @@ export default function LibraryScreen() {
               </View>
             ) : null}
 
-            {uncategorizedMaterials.length > 0 ? (
+            {items.length > 0 ? (
               <Text
                 style={[
                   styles.sectionLabel,
@@ -249,8 +340,8 @@ export default function LibraryScreen() {
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="upload-cloud"
-                title="No PDFs yet"
-                description="Import a PDF from your device — Stymer tracks your real reading time and pages automatically."
+                title="Your library is empty"
+                description="Import a PDF to track your reading, or tap + to take a note."
               />
               <Button
                 label={importing ? "Importing…" : "Import a PDF"}
@@ -262,14 +353,22 @@ export default function LibraryScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <MaterialCard
-            material={item}
-            sessions={sessions}
-            onPress={() => router.push(`/study/${item.id}`)}
-            onMenuPress={() => onMaterialMenu(item.id, item.title)}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.kind === "material" ? (
+            <MaterialCard
+              material={item.m}
+              sessions={sessions}
+              onPress={() => router.push(`/study/${item.m.id}`)}
+              onMenuPress={() => onMaterialMenu(item.m.id, item.m.title)}
+            />
+          ) : (
+            <NoteCard
+              note={item.n}
+              onPress={() => router.push(`/note/${item.n.id}`)}
+              onMenuPress={() => onNoteMenu(item.n.id, item.n.title)}
+            />
+          )
+        }
       />
 
       <NameInputModal
@@ -289,15 +388,157 @@ export default function LibraryScreen() {
         onCancel={() => setEditingCollection(null)}
       />
 
-      {pickerForMaterial ? (
+      {pickerTarget ? (
         <CollectionPickerModal
-          materialId={pickerForMaterial}
-          onClose={() => setPickerForMaterial(null)}
+          target={pickerTarget}
+          onClose={() => setPickerTarget(null)}
         />
       ) : null}
+
+      <Modal
+        visible={addMenuOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setAddMenuOpen(false)}
+      >
+        <Pressable
+          style={addMenuStyles.backdrop}
+          onPress={() => setAddMenuOpen(false)}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={[
+              addMenuStyles.sheet,
+              {
+                backgroundColor: colors.background,
+                paddingBottom: insets.bottom + 16,
+              },
+            ]}
+          >
+            <Text style={[addMenuStyles.title, { color: colors.foreground }]}>
+              Add to library
+            </Text>
+            <MenuRow
+              icon="file-text"
+              label="Import PDF"
+              onPress={() => runFromMenu(onPickPdf)}
+              iconColor={colors.primary}
+              foreground={colors.foreground}
+              border={colors.border}
+            />
+            <MenuRow
+              icon="edit-3"
+              label="New note"
+              onPress={() => runFromMenu(onCreateNote)}
+              iconColor={colors.primary}
+              foreground={colors.foreground}
+              border={colors.border}
+            />
+            <MenuRow
+              icon="folder-plus"
+              label="New collection"
+              onPress={() => runFromMenu(() => setNameModalOpen(true))}
+              iconColor={colors.primary}
+              foreground={colors.foreground}
+              border={colors.border}
+            />
+            <Pressable
+              onPress={() => setAddMenuOpen(false)}
+              style={({ pressed }) => [
+                addMenuStyles.cancelRow,
+                { opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text
+                style={[
+                  addMenuStyles.cancelLabel,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                Cancel
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
+
+function MenuRow({
+  icon,
+  label,
+  onPress,
+  iconColor,
+  foreground,
+  border,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress: () => void;
+  iconColor: string;
+  foreground: string;
+  border: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        addMenuStyles.row,
+        { borderColor: border, opacity: pressed ? 0.6 : 1 },
+      ]}
+    >
+      <Feather name={icon} size={20} color={iconColor} />
+      <Text style={[addMenuStyles.rowLabel, { color: foreground }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const addMenuStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  title: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  rowLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 16,
+  },
+  cancelRow: {
+    alignItems: "center",
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  cancelLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+  },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

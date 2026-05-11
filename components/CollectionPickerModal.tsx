@@ -16,12 +16,16 @@ import { NameInputModal } from "@/components/NameInputModal";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
 
+export type PickerTarget =
+  | { kind: "material"; id: string }
+  | { kind: "note"; id: string };
+
 type Props = {
-  materialId: string;
+  target: PickerTarget;
   onClose: () => void;
 };
 
-export function CollectionPickerModal({ materialId, onClose }: Props) {
+export function CollectionPickerModal({ target, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
@@ -29,6 +33,8 @@ export function CollectionPickerModal({ materialId, onClose }: Props) {
     cmRows,
     addMaterialToCollection,
     removeMaterialFromCollection,
+    addNoteToCollection,
+    removeNoteFromCollection,
     createCollection,
   } = useLibrary();
 
@@ -37,17 +43,32 @@ export function CollectionPickerModal({ materialId, onClose }: Props) {
   const inSet = useMemo(() => {
     const set = new Set<string>();
     for (const r of cmRows) {
-      if (r.materialId === materialId) set.add(r.collectionId);
+      if (target.kind === "material" && r.materialId === target.id)
+        set.add(r.collectionId);
+      else if (target.kind === "note" && r.noteId === target.id)
+        set.add(r.collectionId);
     }
     return set;
-  }, [cmRows, materialId]);
+  }, [cmRows, target]);
+
+  const addToCollection = async (collectionId: string) => {
+    if (target.kind === "material")
+      await addMaterialToCollection(target.id, collectionId);
+    else await addNoteToCollection(target.id, collectionId);
+  };
+
+  const removeFromCollection = async (collectionId: string) => {
+    if (target.kind === "material")
+      await removeMaterialFromCollection(target.id, collectionId);
+    else await removeNoteFromCollection(target.id, collectionId);
+  };
 
   const onToggle = async (collectionId: string) => {
     try {
       if (inSet.has(collectionId)) {
-        await removeMaterialFromCollection(materialId, collectionId);
+        await removeFromCollection(collectionId);
       } else {
-        await addMaterialToCollection(materialId, collectionId);
+        await addToCollection(collectionId);
       }
     } catch {
       // optimistic update already happened; if API fails, the next refresh
@@ -58,7 +79,7 @@ export function CollectionPickerModal({ materialId, onClose }: Props) {
   const onCreate = async (name: string) => {
     try {
       const c = await createCollection(name);
-      await addMaterialToCollection(materialId, c.id);
+      await addToCollection(c.id);
     } finally {
       setCreating(false);
     }

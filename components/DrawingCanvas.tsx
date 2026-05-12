@@ -24,6 +24,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useColors } from "@/hooks/useColors";
 import type { Stroke } from "@/contexts/LibraryContext";
 import {
+  createMomentumScroller,
+  type MomentumScroller,
+} from "@/lib/momentumScroll";
+import {
   applyToStroke,
   bboxOfStrokes,
   compose,
@@ -211,6 +215,35 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       [minScrollY],
     );
 
+    const contentHeightRef = useRef(contentHeight);
+    contentHeightRef.current = contentHeight;
+
+    const momentumRef = useRef<MomentumScroller | null>(null);
+    if (!momentumRef.current) {
+      momentumRef.current = createMomentumScroller((dy) => {
+        const cur = scrollYRef.current;
+        const minY = Math.min(0, viewportHeight - contentHeightRef.current);
+        let next = cur + dy;
+        if (next > 0) next = 0;
+        else if (next < minY) next = minY;
+        if (next === cur) return;
+        setScrollY(next);
+        const bottomVisible = viewportHeight - next;
+        if (bottomVisible > contentHeightRef.current - GROW_THRESHOLD) {
+          if (viewportHeight > 0) {
+            const grown = bottomVisible + viewportHeight;
+            setContentHeight((c) => (c < grown ? grown : c));
+          }
+        }
+      });
+    }
+
+    useEffect(() => {
+      return () => {
+        momentumRef.current?.stop();
+      };
+    }, []);
+
     // --- Selection bookkeeping ---
     const selectedStrokes = useMemo(
       () => strokes.filter((_, i) => selectedIndices.has(i)),
@@ -284,6 +317,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           .maxPointers(1)
           .averageTouches(true)
           .onBegin((e) => {
+            momentumRef.current?.stop();
             const cx = e.x;
             const cy = e.y - scrollYRef.current;
             if (tool === "eraser") {
@@ -349,6 +383,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           .maxPointers(1)
           .averageTouches(true)
           .onBegin((e) => {
+            momentumRef.current?.stop();
             const p = { x: e.x, y: e.y - scrollYRef.current };
             lassoPathRef.current = [p];
             setLassoPath([p]);
@@ -388,6 +423,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
 
     // --- Transform gestures (pan / pinch / rotate the selection) ---
     const startTransform = useCallback(() => {
+      momentumRef.current?.stop();
       if (activeTransformsRef.current === 0) {
         const bbox = selectionBBoxRef.current;
         if (!bbox) return;
@@ -489,6 +525,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           .minPointers(2)
           .maxPointers(2)
           .onBegin(() => {
+            momentumRef.current?.stop();
             scrollBaseRef.current = scrollYRef.current;
           })
           .onUpdate((e) => {
@@ -499,6 +536,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             if (bottomVisible > contentHeight - GROW_THRESHOLD) {
               ensureRoom(bottomVisible);
             }
+          })
+          .onEnd((e) => {
+            const v = e.velocityY ?? 0;
+            if (Math.abs(v) > 80) momentumRef.current?.start(v);
           }),
       [clampScrollY, contentHeight, ensureRoom, viewportHeight],
     );

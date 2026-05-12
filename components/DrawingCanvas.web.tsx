@@ -12,6 +12,10 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import type { Stroke } from "@/contexts/LibraryContext";
 import {
+  createMomentumScroller,
+  type MomentumScroller,
+} from "@/lib/momentumScroll";
+import {
   applyToStroke,
   bboxOfStrokes,
   compose,
@@ -78,6 +82,9 @@ type GestureState = {
   distStart: number;
   angleStart: number;
   movedFar: boolean;
+  lastCentroidY?: number;
+  lastCentroidTs?: number;
+  instantVelocityY?: number;
 };
 
 function strokeBox(s: Stroke) {
@@ -194,6 +201,9 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       distStart: 1,
       angleStart: 0,
       movedFar: false,
+      lastCentroidY: 0,
+      lastCentroidTs: 0,
+      instantVelocityY: 0,
     });
     const pointersRef = useRef<Map<number, PointerState>>(new Map());
 
@@ -241,6 +251,32 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       [viewportHeight],
     );
 
+    // --- Momentum scroller (fling on touch release / wheel injection) ---
+    const momentumRef = useRef<MomentumScroller | null>(null);
+    if (!momentumRef.current) {
+      momentumRef.current = createMomentumScroller((dy) => {
+        const cur = scrollYRef.current;
+        const minY = Math.min(0, viewportHeight - contentHeightRef.current);
+        let next = cur + dy;
+        if (next > 0) next = 0;
+        else if (next < minY) next = minY;
+        if (next === cur) return;
+        scrollYRef.current = next;
+        setScrollY(next);
+        // setScrollY triggers React re-render → useEffect on [scrollY] → redraw.
+        const bottomVisible = viewportHeight - next;
+        if (bottomVisible > contentHeightRef.current - GROW_THRESHOLD) {
+          ensureRoom(bottomVisible);
+        }
+      });
+    }
+
+    useEffect(() => {
+      return () => {
+        momentumRef.current?.stop();
+      };
+    }, []);
+
     // Clear selection on tool change.
     useEffect(() => {
       if (tool !== "lasso") {
@@ -285,6 +321,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
         canUndo: () => historyRef.current.length > 0,
         canRedo: () => futureRef.current.length > 0,
         clearSelection: () => {
+          momentumRef.current?.stop();
           setSelectedIndices(new Set());
           lassoPathRef.current = null;
           liveTransformRef.current = null;
@@ -505,6 +542,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
 
     function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
       e.preventDefault();
+      // Any new input cancels a running fling.
+      momentumRef.current?.stop();
       const canvas = canvasRef.current;
       if (!canvas) return;
       try {
@@ -578,6 +617,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             distStart: dist,
             angleStart: angle,
             movedFar: false,
+            lastCentroidY: centroid.y,
+            lastCentroidTs:
+              typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now(),
+            instantVelocityY: 0,
           };
         }
         requestRedraw();
@@ -705,6 +750,17 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
           if (bottomVisible > contentHeightRef.current - GROW_THRESHOLD) {
             ensureRoom(bottomVisible);
           }
+          // Sample velocity for momentum-on-release. Low-pass for stability.
+          const now =
+            typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now();
+          const dt = Math.max(1, now - (g.lastCentroidTs ?? now));
+          const sample = ((c.y - (g.lastCentroidY ?? c.y)) / dt) * 1000;
+          const prev = g.instantVelocityY ?? 0;
+          g.instantVelocityY = prev * 0.7 + sample * 0.3;
+          g.lastCentroidY = c.y;
+          g.lastCentroidTs = now;
           requestRedraw();
         }
       }
@@ -724,6 +780,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       const g = gestureRef.current;
 
       if (remaining === 0) {
+        if (g.kind === "scroll") {
+          const v = g.instantVelocityY ?? 0;
+          if (Math.abs(v) > 80) momentumRef.current?.start(v);
+        }
         if (g.kind === "draw") {
           const cur = inProgressRef.current;
           inProgressRef.current = null;
@@ -774,6 +834,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
         const last = activePointers()[0];
         startTransformGesture({ x: last.x, y: last.y });
       } else if (remaining === 1 && g.kind === "scroll") {
+        // Lifting one of two fingers ends the scroll session — fling now,
+        // and let the remaining pointer act as a fresh down on next move.
+        const v = g.instantVelocityY ?? 0;
+        if (Math.abs(v) > 80) momentumRef.current?.start(v);
         gestureRef.current = {
           kind: "none",
           startX: 0,
@@ -792,14 +856,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       // Scroll vertically with the wheel; let pinch (ctrlKey) fall through to default.
       if (e.ctrlKey) return;
       e.preventDefault();
-      const next = clampScrollY(scrollYRef.current - e.deltaY);
-      scrollYRef.current = next;
-      setScrollY(next);
-      const bottomVisible = viewportHeight - next;
-      if (bottomVisible > contentHeightRef.current - GROW_THRESHOLD) {
-        ensureRoom(bottomVisible);
-      }
-      requestRedraw();
+      // Inject velocity so sustained fast scroll keeps gliding briefly after release.
+      // Friction (2.5/sec) decays a single 100-delta click in ~400ms (~320 px).
+      const WHEEL_GAIN = 8;
+      momentumRef.current?.inject(-e.deltaY * WHEEL_GAIN);
     }
 
     // --- Selection action bar position ---

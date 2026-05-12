@@ -1,4 +1,4 @@
-import React from "react";
+import React, { forwardRef } from "react";
 import { StyleSheet, Text, TextInput, TextInputProps, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -7,7 +7,10 @@ type Props = TextInputProps & {
   label?: string;
 };
 
-export function Input({ label, style, ...rest }: Props) {
+export const Input = forwardRef<TextInput, Props>(function Input(
+  { label, style, ...rest },
+  ref,
+) {
   const colors = useColors();
   return (
     <View style={styles.wrapper}>
@@ -17,6 +20,7 @@ export function Input({ label, style, ...rest }: Props) {
         </Text>
       ) : null}
       <TextInput
+        ref={ref}
         placeholderTextColor={colors.mutedForeground}
         {...rest}
         style={[
@@ -31,7 +35,7 @@ export function Input({ label, style, ...rest }: Props) {
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {

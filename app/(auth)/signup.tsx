@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -27,6 +28,10 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const nameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const onSubmit = async () => {
     setSubmitting(true);
@@ -74,13 +79,18 @@ export default function SignupScreen() {
             Create your account
           </Text>
           <Input
+            ref={nameRef}
             label="Name"
             placeholder="Your name"
             autoCapitalize="words"
             value={name}
             onChangeText={setName}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => emailRef.current?.focus()}
           />
           <Input
+            ref={emailRef}
             label="Email"
             placeholder="you@example.com"
             keyboardType="email-address"
@@ -88,13 +98,19 @@ export default function SignupScreen() {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <Input
+            ref={passwordRef}
             label="Password"
             placeholder="At least 4 characters"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={onSubmit}
           />
           <Button
             label="Create account"

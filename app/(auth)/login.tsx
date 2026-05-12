@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -26,6 +27,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const onSubmit = async () => {
     setSubmitting(true);
@@ -78,6 +82,7 @@ export default function LoginScreen() {
             Welcome back
           </Text>
           <Input
+            ref={emailRef}
             label="Email"
             placeholder="you@example.com"
             keyboardType="email-address"
@@ -85,13 +90,19 @@ export default function LoginScreen() {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <Input
+            ref={passwordRef}
             label="Password"
             placeholder="Your password"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={onSubmit}
           />
           <Button
             label="Sign in"

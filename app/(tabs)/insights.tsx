@@ -19,7 +19,7 @@ import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
 
 type Metric = "pages" | "words" | "keystrokes";
-const METRIC_KEY = "@Stymer/insights_metric";
+const METRIC_KEY = "@Tarkeez/insights_metric";
 const METRIC_LABEL: Record<Metric, string> = {
   pages: "Pages",
   words: "Words",

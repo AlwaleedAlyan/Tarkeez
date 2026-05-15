@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { normalizeUrl } from "@/lib/normalizeUrl";
+import { openInAppBrowser } from "@/lib/openInAppBrowser";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -69,11 +70,7 @@ export default function BrowserScreen() {
   const bottomPad = (Platform.OS === "web" ? 100 : insets.bottom) + 80;
 
   function openUrl(url: string, title?: string) {
-    if (!url) return;
-    router.push({
-      pathname: "/browser/view",
-      params: { url, title: title ?? "" },
-    });
+    openInAppBrowser(router, url, title);
   }
 
   function onSubmitSearch() {

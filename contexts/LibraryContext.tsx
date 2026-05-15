@@ -290,23 +290,23 @@ function uuidV4() {
 }
 
 function sessionsKey(userId: string) {
-  return `@Stymer/sessions/${userId}`;
+  return `@Tarkeez/sessions/${userId}`;
 }
 function annotationsKey(userId: string, materialId: string) {
-  return `@Stymer/annos/${userId}/${materialId}`;
+  return `@Tarkeez/annos/${userId}/${materialId}`;
 }
 function noteStrokesKey(userId: string, noteId: string) {
-  return `@Stymer/note_strokes/${userId}/${noteId}`;
+  return `@Tarkeez/note_strokes/${userId}/${noteId}`;
 }
 
 function cachePath(userId: string, materialId: string): string | null {
   if (!FileSystem.cacheDirectory) return null;
-  return `${FileSystem.cacheDirectory}Stymer/${userId}/${materialId}.pdf`;
+  return `${FileSystem.cacheDirectory}Tarkeez/${userId}/${materialId}.pdf`;
 }
 
 async function ensureCacheDir(userId: string) {
   if (!FileSystem.cacheDirectory) return;
-  const dir = `${FileSystem.cacheDirectory}Stymer/${userId}`;
+  const dir = `${FileSystem.cacheDirectory}Tarkeez/${userId}`;
   try {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   } catch {

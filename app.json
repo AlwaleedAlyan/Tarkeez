@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Stymer",
-    "slug": "Stymer",
+    "name": "Tarkeez",
+    "slug": "tarkeez",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "Stymer",
+    "scheme": "tarkeez",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stymer.app"
+      "bundleIdentifier": "com.tarkeez.app"
     },
     "android": {
-      "package": "com.stymer.app"
+      "package": "com.tarkeez.app"
     },
     "web": {
       "favicon": "./assets/images/icon.png"

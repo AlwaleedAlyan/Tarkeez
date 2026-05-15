@@ -250,7 +250,7 @@ export default function StudyScreen() {
         Haptics.selectionAsync().catch(() => {});
       }
       setTool(next);
-      sendToWebView(`window.__stymerSetTool && window.__stymerSetTool(${JSON.stringify(next)});`);
+      sendToWebView(`window.__tarkeezSetTool && window.__tarkeezSetTool(${JSON.stringify(next)});`);
     },
     [sendToWebView],
   );
@@ -258,8 +258,8 @@ export default function StudyScreen() {
   const onClearPage = useCallback(() => {
     const doClear = () => {
       sendToWebView(
-        `var p = window.__stymerGetCurrentPage && window.__stymerGetCurrentPage();
-         if (p && window.__stymerClearPage) window.__stymerClearPage(p);`,
+        `var p = window.__tarkeezGetCurrentPage && window.__tarkeezGetCurrentPage();
+         if (p && window.__tarkeezClearPage) window.__tarkeezClearPage(p);`,
       );
     };
     if (Platform.OS === "web") {

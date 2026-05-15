@@ -36,7 +36,7 @@ const MAX_H = SCREEN.height - RESERVED_V;
 const RATIO = 9 / 16;
 const CARD_W = Math.min(MAX_W, MAX_H * RATIO);
 const CARD_H = CARD_W / RATIO;
-const LOGO = require("../assets/images/stymer_logo.png");
+const LOGO = require("../assets/images/tarkeez_logo.png");
 
 function fmtDuration(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -70,7 +70,7 @@ export function SharePostModal({
     if (Platform.OS === "web") {
       Alert.alert(
         "Sharing on the web",
-        "Open Stymer on your phone to share or save this post.",
+        "Open Tarkeez on your phone to share or save this post.",
       );
       return;
     }
@@ -110,7 +110,7 @@ export function SharePostModal({
       if (!perm.granted) {
         Alert.alert(
           "Permission needed",
-          "Stymer needs access to your photos to save the post.",
+          "Tarkeez needs access to your photos to save the post.",
         );
         return;
       }
@@ -187,7 +187,7 @@ export function SharePostModal({
                 style={[styles.logo, { tintColor: colors.primary }]}
                 resizeMode="contain"
               />
-              <Text style={styles.brand}>STYMER</Text>
+              <Text style={styles.brand}>TARKEEZ</Text>
             </View>
           </View>
         </View>

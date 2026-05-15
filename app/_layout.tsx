@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LibraryProvider } from "@/contexts/LibraryContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { migrateStymerToTarkeez } from "@/lib/migrateLegacyStorage";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -57,6 +58,13 @@ function RootLayoutNav() {
           animation: "slide_from_right",
         }}
       />
+      <Stack.Screen
+        name="browser/view"
+        options={{
+          presentation: "card",
+          animation: "slide_from_right",
+        }}
+      />
     </Stack>
   );
 }
@@ -68,14 +76,19 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [migrationDone, setMigrationDone] = useState(false);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    migrateStymerToTarkeez().finally(() => setMigrationDone(true));
+  }, []);
+
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && migrationDone) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, migrationDone]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if ((!fontsLoaded && !fontError) || !migrationDone) return null;
 
   return (
     <SafeAreaProvider>

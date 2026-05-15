@@ -1,7 +1,7 @@
-# Stymer — Project Memory
+# Tarkeez — Project Memory
 
 ## What This App Does
-Stymer is a study time tracker that monitors student activity while reading materials.
+Tarkeez is a study time tracker that monitors student activity while reading materials.
 Users can upload PDFs, track study sessions, take notes, view insights, and study
 together with mates. Available on iOS, Android, and Desktop (PWA).
 
@@ -84,7 +84,7 @@ screen (app/) → context/hook → lib/api.ts → Supabase
 
 ## 🎨 Design Rules
 
-### Stymer's Design Personality
+### Tarkeez's Design Personality
 Students use this app daily for focus — the UI must feel:
 - **Calm and focused** — not gamified to distraction
 - **Trustworthy** — students rely on it for real progress data
@@ -136,11 +136,11 @@ Students use this app daily for focus — the UI must feel:
 - DRY but readable — duplicate once, abstract twice
 
 ### AsyncStorage
-- Key prefix is `@Stymer/` (capital S) — never `@stymer/`
+- Key prefix is `@Tarkeez/` (capital T) — never `@tarkeez/`
 - Never change existing AsyncStorage keys — breaking change
 - Known keys:
-  - `@Stymer/sessions/{userId}` — study sessions cache
-  - `@Stymer/note_strokes/{userId}/{noteId}` — drawing strokes cache
+  - `@Tarkeez/sessions/{userId}` — study sessions cache
+  - `@Tarkeez/note_strokes/{userId}/{noteId}` — drawing strokes cache
 
 ### Performance
 - Classify URLs on first visit → **cache result** — never re-classify same domain
@@ -154,7 +154,7 @@ Students use this app daily for focus — the UI must feel:
 ## Supabase Infrastructure
 
 ### Project
-- Project name: Stymer
+- Project name: Tarkeez
 - URL: stored in EXPO_PUBLIC_SUPABASE_URL
 - Anon key: stored in EXPO_PUBLIC_SUPABASE_ANON_KEY
 
@@ -181,7 +181,7 @@ Students use this app daily for focus — the UI must feel:
 - LibraryContext auto-loads materials, collections, and join rows on user change
 - Library top-level renders only uncategorized materials
 - `uncategorizedMaterials` = `materials.filter(m => !cmRows.some(r => r.materialId === m.id))`
-- Local cache: `${cacheDirectory}Stymer/{user_id}/{material_id}.pdf` (download-on-demand)
+- Local cache: `${cacheDirectory}Tarkeez/{user_id}/{material_id}.pdf` (download-on-demand)
 
 ---
 
@@ -249,7 +249,7 @@ is non-null per the ss_one_target_chk constraint.
 - content_html (text, not null, default '') — HTML from react-native-pell-rich-editor
 - drawing_strokes (jsonb, not null, default '[]') — Stroke objects
   ({ color, width, points: {x,y}[], kind?: 'pen'|'highlighter' })
-  Cached locally under @Stymer/note_strokes/{userId}/{noteId}, synced with ~1.5s debounced PATCH
+  Cached locally under @Tarkeez/note_strokes/{userId}/{noteId}, synced with ~1.5s debounced PATCH
 - created_at (timestamptz, default now())
 - updated_at (timestamptz, default now()) — bumped explicitly by PATCH /notes/:id
 - RLS: select/insert/update/delete all gated on auth.uid() = user_id
@@ -366,7 +366,7 @@ Always: Cache result by videoId
 - Best study hours pattern
 - Streak history and milestones
 
-### Stymer Pro (Subscription)
+### Tarkeez Pro (Subscription)
 - Gate all AI-powered features behind `isPro` flag
 - Pro features: AI note summarization, flashcard generation, Quiz Me mode,
   advanced analytics, unlimited history, multi-device sync
@@ -388,4 +388,4 @@ Always: Cache result by videoId
 - Inflate or fake study session data
 - Modify navigation or layout files unless explicitly asked
 - Change existing TypeScript types
-- Use `@stymer/` (lowercase) — always `@Stymer/`
+- Use `@tarkeez/` (lowercase) — always `@Tarkeez/`

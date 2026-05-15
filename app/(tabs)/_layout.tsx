@@ -16,6 +16,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "books.vertical", selected: "books.vertical.fill" }} />
         <Label>Library</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="browser">
+        <Icon sf={{ default: "safari", selected: "safari.fill" }} />
+        <Label>Browser</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="insights">
         <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
         <Label>Insights</Label>
@@ -79,6 +83,18 @@ function ClassicTabLayout() {
               <SymbolView name="books.vertical" tintColor={color} size={24} />
             ) : (
               <Feather name="book" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="browser"
+        options={{
+          title: "Browser",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="safari" tintColor={color} size={24} />
+            ) : (
+              <Feather name="compass" size={22} color={color} />
             ),
         }}
       />

@@ -170,6 +170,53 @@ export async function api<T = unknown>(
     } = await supabase.auth.getUser();
     if (!user) throw new ApiError("Not authenticated", 401);
 
+    // Metadata-only branch: called by the outbox handler after it has
+    // already uploaded the PDF to Supabase Storage directly. No FormData;
+    // the row is inserted at the supplied client-generated id.
+    if (opts.json !== undefined && opts.formData === undefined) {
+      const p = opts.json as {
+        id?: string;
+        title?: string;
+        fileName?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+        totalPages?: number | null;
+        currentPage?: number;
+      };
+      if (!p.id || !p.title || !p.fileName) {
+        throw new ApiError("id, title, fileName required", 400);
+      }
+      const { data, error } = await supabase
+        .from("materials")
+        .insert({
+          id: p.id,
+          user_id: user.id,
+          title: p.title,
+          file_name: p.fileName,
+          mime_type: p.mimeType ?? "application/pdf",
+          size_bytes: p.sizeBytes ?? 0,
+          total_pages: p.totalPages ?? null,
+          current_page: p.currentPage ?? 1,
+        })
+        .select()
+        .single();
+      if (error) throw new ApiError(error.message, 400);
+      const m = data;
+      return {
+        material: {
+          id: m.id,
+          title: m.title,
+          fileName: m.file_name,
+          mimeType: m.mime_type,
+          sizeBytes: m.size_bytes,
+          totalPages: m.total_pages,
+          currentPage: m.current_page,
+          createdAt: m.created_at,
+          updatedAt: m.updated_at,
+        },
+      } as T;
+    }
+
     const formData = opts.formData;
     if (!formData) throw new ApiError("Missing formData", 400);
 
@@ -326,12 +373,14 @@ export async function api<T = unknown>(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new ApiError("Not authenticated", 401);
-    const { name } = opts.json as any;
+    const { id, name } = opts.json as any;
     const trimmed = (name ?? "").toString().trim();
     if (!trimmed) throw new ApiError("Name is required", 400);
+    const insertRow: any = { user_id: user.id, name: trimmed };
+    if (typeof id === "string" && id.length > 0) insertRow.id = id;
     const { data, error } = await supabase
       .from("collections")
-      .insert({ user_id: user.id, name: trimmed })
+      .insert(insertRow)
       .select()
       .single();
     if (error) throw new ApiError(error.message, 400);
@@ -557,8 +606,9 @@ export async function api<T = unknown>(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new ApiError("Not authenticated", 401);
-    const { title, contentHtml, drawingStrokes } = (opts.json ?? {}) as any;
+    const { id, title, contentHtml, drawingStrokes } = (opts.json ?? {}) as any;
     const insertRow: any = { user_id: user.id };
+    if (typeof id === "string" && id.length > 0) insertRow.id = id;
     if (title !== undefined) insertRow.title = title;
     if (contentHtml !== undefined) insertRow.content_html = contentHtml;
     if (drawingStrokes !== undefined)
@@ -734,4 +784,39 @@ export async function fileUrl(materialId: string): Promise<string> {
   }
 
   return data.signedUrl;
+}
+
+export async function uploadMaterialStorage(
+  userId: string,
+  fileName: string,
+  localUri: string,
+  mimeType: string,
+): Promise<void> {
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  if (blob.size > MAX_MATERIAL_BYTES) {
+    throw new ApiError(
+      `This PDF is ${formatMb(blob.size)} MB. Materials must be 15 MB or less.`,
+      413,
+    );
+  }
+  const filePath = `${userId}/${fileName}`;
+  const { error } = await supabase.storage
+    .from("materials")
+    .upload(filePath, blob, {
+      contentType: mimeType || "application/pdf",
+      upsert: true,
+    });
+  if (error) throw new ApiError(error.message, 400);
+}
+
+export async function removeMaterialStorage(
+  userId: string,
+  fileName: string,
+): Promise<void> {
+  const filePath = `${userId}/${fileName}`;
+  const { error } = await supabase.storage
+    .from("materials")
+    .remove([filePath]);
+  if (error) throw new ApiError(error.message, 400);
 }

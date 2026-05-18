@@ -17,6 +17,13 @@ const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
 const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
 const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
 
+// SharedArrayBuffer (required by expo-sqlite's WASM web build) is only
+// exposed by browsers when the page is served with these two headers.
+const CROSS_ORIGIN_HEADERS = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -33,6 +40,7 @@ const MIME_TYPES = {
   ".ttf": "font/ttf",
   ".otf": "font/otf",
   ".map": "application/json",
+  ".wasm": "application/wasm",
 };
 
 function getAppName() {
@@ -49,7 +57,10 @@ function serveManifest(platform, res) {
   const manifestPath = path.join(STATIC_ROOT, platform, "manifest.json");
 
   if (!fs.existsSync(manifestPath)) {
-    res.writeHead(404, { "content-type": "application/json" });
+    res.writeHead(404, {
+      "content-type": "application/json",
+      ...CROSS_ORIGIN_HEADERS,
+    });
     res.end(
       JSON.stringify({ error: `Manifest not found for platform: ${platform}` }),
     );
@@ -61,6 +72,7 @@ function serveManifest(platform, res) {
     "content-type": "application/json",
     "expo-protocol-version": "1",
     "expo-sfv-version": "0",
+    ...CROSS_ORIGIN_HEADERS,
   });
   res.end(manifest);
 }
@@ -77,7 +89,10 @@ function serveLandingPage(req, res, landingPageTemplate, appName) {
     .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl)
     .replace(/APP_NAME_PLACEHOLDER/g, appName);
 
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    ...CROSS_ORIGIN_HEADERS,
+  });
   res.end(html);
 }
 
@@ -86,13 +101,13 @@ function serveStaticFile(urlPath, res) {
   const filePath = path.join(STATIC_ROOT, safePath);
 
   if (!filePath.startsWith(STATIC_ROOT)) {
-    res.writeHead(403);
+    res.writeHead(403, { ...CROSS_ORIGIN_HEADERS });
     res.end("Forbidden");
     return;
   }
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    res.writeHead(404);
+    res.writeHead(404, { ...CROSS_ORIGIN_HEADERS });
     res.end("Not Found");
     return;
   }
@@ -100,7 +115,10 @@ function serveStaticFile(urlPath, res) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
   const content = fs.readFileSync(filePath);
-  res.writeHead(200, { "content-type": contentType });
+  res.writeHead(200, {
+    "content-type": contentType,
+    ...CROSS_ORIGIN_HEADERS,
+  });
   res.end(content);
 }
 

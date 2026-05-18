@@ -11,6 +11,7 @@ together with mates. Available on iOS, Android, and Desktop (PWA).
 - Frontend: Expo / React Native (expo-router)
 - Language: TypeScript (strict — no `any`, no implicit types)
 - Backend: Supabase (Auth, Database, Storage, Realtime)
+- Local DB: `expo-sqlite` + `drizzle-orm` (offline-first; see OFFLINE_ARCHITECTURE_PLAN.md)
 - State Management: React Context (AuthContext, LibraryContext, ThemeContext)
 - Package manager: pnpm
 - Validation: Zod
@@ -30,10 +31,109 @@ generated via `npx expo prebuild` and committed. To run in dev:
 app/              → screens and navigation (expo-router)
 components/       → reusable UI components
 contexts/         → AuthContext, LibraryContext, ThemeContext
+db/               → local SQLite layer (schema.ts, client.ts, migrate.ts,
+                    migrations/, repositories/ as added per milestone)
 lib/              → api.ts (Supabase calls), supabase.ts (client)
 constants/        → colors, themes, design tokens
 hooks/            → useColors
 ```
+
+### Local DB (offline-first, Milestones 0–9 complete)
+- File: `tarkeez.db` opened via `expo-sqlite` `openDatabaseSync` in `db/client.ts`
+- Schema is the source of truth in `db/schema.ts`; migrations are generated
+  with `pnpm exec drizzle-kit generate` into `db/migrations/`
+- Migrations run on app boot via `useDbMigrations()` in `db/migrate.ts`,
+  invoked from `app/_layout.tsx` before any provider mounts
+- WAL mode + foreign keys enabled on native; web uses the WASM driver
+- Strokes do NOT live in SQLite — see OFFLINE_ARCHITECTURE_PLAN.md §3
+- Metro is configured to bundle `.sql` files (see `metro.config.js`)
+- Write queue: `db/sync.ts` is the generic outbox engine (`enqueue`,
+  `drain`, `start`, `stop`, `registerHandler`). It backs all
+  offline-tolerant writes; per-entity handlers live in `db/handlers/*`.
+  `app/_layout.tsx` calls `startSync()` once after migrations succeed
+  (gated by `db != null` — runs on native and Chromium web), then on app foreground,
+  network reconnect (`@react-native-community/netinfo`), and a 30s
+  heartbeat. Backoff: 1s → 2s → 4s → 16s → 5min.
+- Sessions: `recordSession` writes the row to SQLite with
+  `sync_status='pending_create'`, enqueues a `study_sessions:create`
+  outbox row, and lets the push worker POST it. There is no longer a
+  per-entity retry loop.
+- Collections + collection_materials: all seven mutations
+  (`createCollection`, `updateCollection`, `deleteCollection`,
+  `add/removeMaterialToCollection`, `add/removeNoteToCollection`) write
+  SQLite (`pending_create`/`pending_update`/`pending_delete`), enqueue
+  to outbox, and return optimistically. `id` is client-generated
+  (uuidv4) for collections so the new row is usable before the server
+  acknowledges. Deletes are soft locally (`deleted_at`); the push
+  worker hard-deletes after the server confirms. Live queries already
+  filter `WHERE deleted_at IS NULL`.
+- Notes: `createNote`, `updateNote`, `deleteNote` all go through the
+  outbox (same pattern as collections — client-generated uuid for
+  notes, soft delete locally + hard delete after server confirm).
+  Strokes are NEVER carried by `updateNote`; they live in the strokes
+  store (`db/strokesStore.ts`) — `${documentDirectory}Tarkeez/{userId}/
+  strokes/{noteId}.json` on native, OPFS via
+  `navigator.storage.getDirectory()` with an IndexedDB fallback on
+  Chromium web. `saveNoteStrokes` writes the bytes immediately,
+  updates the manifest columns (`strokes_file_path`,
+  `strokes_byte_size`, `strokes_dirty_at`), and after a 1.5s debounce
+  enqueues ONE `note_strokes:update` outbox row (deduped via
+  `enqueueOutboxIfNoPending`). The handler reads the bytes back at
+  send time and PATCHes the existing `drawing_strokes` jsonb on
+  Supabase; on success it stamps `strokes_server_synced_at` and
+  clears `strokes_dirty_at` via CAS so concurrent draws aren't lost.
+  Boot-time scan in `LibraryContext` re-enqueues any note with
+  `strokes_dirty_at IS NOT NULL` (runs on every SQLite platform).
+- Materials: `addMaterial` generates a client uuid, copies the PDF
+  to `${cacheDirectory}Tarkeez/{userId}/{materialId}.pdf`, writes the
+  SQLite row with `sync_status='pending_create'` + `local_file_path`,
+  and enqueues `materials:create`. The handler does two-phase server
+  write: (1) `uploadMaterialStorage(userId, fileName, localUri, mt)`
+  goes straight to Supabase Storage; (2) POST `/materials` JSON body
+  (no FormData) inserts the metadata row. `updateMaterial` is
+  coalesced via `enqueueOutboxIfNoPending` — page-turn autosave never
+  queues more than one outbox row per material; the handler reads
+  current state from SQLite at drain time. `deleteMaterial` soft-
+  deletes locally (incl. local PDF), enqueues `materials:delete` with
+  `{userId, fileName}` payload, and the handler removes the Storage
+  object + DELETEs the row + hard-deletes the local SQLite row.
+- Pull worker (`db/pull.ts`): mirrors the outbox engine — runs on
+  app foreground, network reconnect, and a **60s heartbeat**.
+  `startPull(userId)` is wired from `LibraryContext` when the user
+  becomes available. Each `pullAll` cycles through `pullMaterials /
+  pullCollections / pullCMRows / pullNotes / pullSessions`; each
+  `pullX` calls the existing `api(...)` GET, reuses
+  `upsertXFromServer` (which already has the LWW guard
+  `WHERE sync_status = 'synced'`), and then runs a tombstone scan
+  (`tombstoneMissingX`) that **hard-deletes** any locally-synced
+  rows absent from the server response. `pullNotes` also hydrates
+  the strokes store via `applyServerStrokes` when the server copy is
+  newer and the local copy isn't dirty. Last-write-wins is
+  the documented semantic; "server wins" applies to strokes when
+  `strokes_dirty_at IS NULL`. `last_pulled_at` is recorded in
+  the `meta` table.
+- Web (Chromium-first): `db/client.ts` initializes the WASM SQLite
+  build on web when `typeof SharedArrayBuffer !== "undefined"`,
+  otherwise leaves `db = null` and the legacy `webMaterials/...`
+  React-state path (still in `LibraryContext`) renders the library.
+  Both `metro.config.js` (dev) and `server/serve.js` (prod) inject
+  `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` on every response so
+  the browser exposes SAB; `server/serve.js` also serves `.wasm` as
+  `application/wasm`. Persistence uses OPFS; data survives reload
+  on Chrome/Edge. Safari/Firefox keep using the legacy path. The
+  outbox + pull workers run unchanged on web because they were
+  already gated on `db != null`.
+- Strokes store (`db/strokesStore.ts`): native uses
+  `expo-file-system` at `${documentDirectory}Tarkeez/{userId}/
+  strokes/{noteId}.json`; Chromium web uses OPFS via
+  `navigator.storage.getDirectory()` with an IndexedDB fallback
+  (object store `tarkeez_strokes`). The `notes.strokes_file_path`
+  manifest column holds the OS path on native and a logical
+  `web:Tarkeez/...` handle on web — readers always go through
+  `readStrokesFile(userId, noteId)`. The legacy AsyncStorage
+  `@Tarkeez/note_strokes/*` keys are only touched on the `db == null`
+  Safari/Firefox fallback; the backfill drains pre-M9 installs.
 
 ### Feature Structure (for new features)
 ```
@@ -59,12 +159,30 @@ Never hardcode these — always use env variables only.
 
 ### Golden Path for New Features
 ```
-screen (app/) → context/hook → lib/api.ts → Supabase
+screen (app/) → context/hook → db/repositories/* (SQLite)
+  → db/sync.ts outbox → lib/api.ts → Supabase
+                                   ↑
+                          db/pull.ts (inverse)
 ```
-- Business logic lives in `lib/api.ts` — never in components or screens
+- SQLite is the canonical read source via `useLiveQuery`
+  (`drizzle-orm/expo-sqlite/query`)
+- Writes go to SQLite first (`sync_status='pending_*'`), then enqueue
+  to `sync_outbox`; the push worker (`db/sync.ts`) drains it on app
+  foreground, network reconnect, and a 30s heartbeat
+- The pull worker (`db/pull.ts`) hydrates SQLite from Supabase on
+  foreground, reconnect, and a 60s heartbeat (LWW by
+  `server_updated_at`)
+- Per-entity push handlers live next to repositories in
+  `db/handlers/*` — `lib/api.ts` is the network seam, not where the
+  business logic lives
 - UI state lives in contexts — never fetched directly from screens
-- New tables always need: RLS enabled + policies mirroring existing pattern
+- New tables always need: RLS enabled + policies mirroring existing
+  pattern, plus a `db/schema.ts` mirror and a repository
 - Offline-first: any user-generated data must work without network
+- Safari/Firefox-without-SAB fall back to the legacy
+  `webMaterials`/`webCollections`/… React-state path in
+  `LibraryContext`; that fallback is deliberately preserved until
+  SQLite WASM reaches every browser
 
 ### Before Writing Code, Always Ask:
 1. Where does this data live? (local, remote, cache?)
@@ -74,9 +192,17 @@ screen (app/) → context/hook → lib/api.ts → Supabase
 5. Does this create a privacy or security concern?
 
 ### Key Patterns
-- **Repository pattern** — all Supabase calls abstracted in `lib/api.ts`
-- **Offline-first** — AsyncStorage cache first, sync to Supabase in parallel
-- **Hybrid sync** — failed POSTs set `pendingSync=true`, retried on reconnect
+- **Repository pattern** — every entity has a `db/repositories/*.ts`
+  with typed Drizzle queries; the network seam is `lib/api.ts`,
+  invoked only from `db/handlers/*.ts` by the push worker
+- **SQLite as source of truth** — UI reads via `useLiveQuery`; the
+  Supabase fetch only feeds local state via the pull worker
+- **Outbox push** — every mutation writes SQLite first
+  (`sync_status='pending_*'`), then enqueues a `sync_outbox` row
+  the push worker (`db/sync.ts`) drains on foreground, reconnect,
+  and a 30s heartbeat (backoff: 1s → 2s → 4s → 16s → 5min)
+- **Timed pull** — `db/pull.ts` mirrors the outbox cadence (60s
+  heartbeat) and reconciles via LWW + tombstone scan
 - **Immutable sessions** — once a study session ends, it cannot be edited
 - **No screen reads** — classifier uses URL/domain only, never page content
 
@@ -135,12 +261,23 @@ Students use this app daily for focus — the UI must feel:
 - No silent failures — surface errors to the user appropriately
 - DRY but readable — duplicate once, abstract twice
 
-### AsyncStorage
+### AsyncStorage (legacy fallback only)
 - Key prefix is `@Tarkeez/` (capital T) — never `@tarkeez/`
 - Never change existing AsyncStorage keys — breaking change
+- SQLite is canonical wherever it can run; the keys below are only
+  touched on the `db == null` (Safari/Firefox without SAB) path, and
+  the backfill (`db/backfill.ts`, sentinel `backfill_v2_done`) drains
+  them into SQLite on first boot after upgrade
 - Known keys:
-  - `@Tarkeez/sessions/{userId}` — study sessions cache
-  - `@Tarkeez/note_strokes/{userId}/{noteId}` — drawing strokes cache
+  - `@Tarkeez/prefs` — theme/accent/notifications (local-only,
+    always — not migrated)
+  - `@Tarkeez/sessions/{userId}` — legacy sessions cache; SQLite
+    `study_sessions` + `useLiveSessions` is canonical
+  - `@Tarkeez/annos/{userId}/{materialId}` — legacy annotations
+    cache; SQLite `annotations` is canonical
+  - `@Tarkeez/note_strokes/{userId}/{noteId}` — legacy strokes
+    cache; the strokes store via `db/strokesStore.ts` is canonical
+    (filesystem on native, OPFS/IndexedDB on Chromium web)
 
 ### Performance
 - Classify URLs on first visit → **cache result** — never re-classify same domain
@@ -177,11 +314,19 @@ Students use this app daily for focus — the UI must feel:
 - No manual JWT handling — Supabase manages all tokens automatically
 
 ### How Library Persistence Works
-- Materials stored in `materials` Postgres table; PDF blobs in `materials` Storage bucket
-- LibraryContext auto-loads materials, collections, and join rows on user change
+- Local SQLite (`db/schema.ts`, opened in `db/client.ts`) is the
+  source of truth; `LibraryContext` reads via `useLiveQuery` hooks
+  exposed from `db/repositories/*`. The Supabase fetch on user change
+  feeds the local DB through the pull worker — it doesn't drive the
+  UI directly
+- Materials metadata in `materials` Postgres table; PDF blobs in the
+  `materials` Storage bucket
+- PDF binary cache: `${cacheDirectory}Tarkeez/{user_id}/{material_id}.pdf`
+  (download-on-demand, separate from SQLite)
 - Library top-level renders only uncategorized materials
 - `uncategorizedMaterials` = `materials.filter(m => !cmRows.some(r => r.materialId === m.id))`
-- Local cache: `${cacheDirectory}Tarkeez/{user_id}/{material_id}.pdf` (download-on-demand)
+- Safari/Firefox-without-SAB run the legacy in-memory React-state
+  path inside `LibraryContext`; SQLite is silently skipped there
 
 ---
 
@@ -223,7 +368,7 @@ Students use this app daily for focus — the UI must feel:
 ### study_sessions
 One row per study session — PDFs OR notes; exactly one of material_id/note_id
 is non-null per the ss_one_target_chk constraint.
-- id (uuid, primary key) — client-supplied (uuidV4) so AsyncStorage and DB share same id
+- id (uuid, primary key) — client-supplied (uuidV4) so the local SQLite row and the server row share the same id
 - user_id (uuid, references profiles)
 - material_id (uuid, NULLABLE, references materials on delete cascade)
 - note_id (uuid, NULLABLE, references notes on delete cascade)
@@ -240,7 +385,11 @@ is non-null per the ss_one_target_chk constraint.
 - created_at (timestamptz)
 - CHECK ss_one_target_chk: exactly one of (material_id, note_id) is set
 - RLS: view ✅ insert ✅ update ✅ delete ✅
-- Storage: hybrid AsyncStorage + Supabase POST (pendingSync pattern, 4s debounce)
+- Storage: SQLite (`pending_create` row) + `sync_outbox` row; the
+  push worker in `db/sync.ts` drains the outbox on app foreground,
+  network reconnect, and a 30s heartbeat. Safari/Firefox-without-SAB
+  use the legacy AsyncStorage `@Tarkeez/sessions/{userId}` cache;
+  the backfill drains it once SQLite is available.
 
 ### notes
 - id (uuid, primary key, default gen_random_uuid())
@@ -248,8 +397,13 @@ is non-null per the ss_one_target_chk constraint.
 - title (text, not null, default 'Untitled')
 - content_html (text, not null, default '') — HTML from react-native-pell-rich-editor
 - drawing_strokes (jsonb, not null, default '[]') — Stroke objects
-  ({ color, width, points: {x,y}[], kind?: 'pen'|'highlighter' })
-  Cached locally under @Tarkeez/note_strokes/{userId}/{noteId}, synced with ~1.5s debounced PATCH
+  ({ color, width, points: {x,y}[], kind?: 'pen'|'highlighter' }).
+  Local canonical store is the strokes store (`db/strokesStore.ts`):
+  filesystem on native, OPFS/IndexedDB on Chromium web. The push
+  worker reads the file at send time and ships the entire array as
+  the existing jsonb on PATCH `/notes/:id` (~1.5s debounce, coalesced
+  via `enqueueOutboxIfNoPending`). Safari/Firefox fallback still uses
+  `@Tarkeez/note_strokes/{userId}/{noteId}` + a direct PATCH.
 - created_at (timestamptz, default now())
 - updated_at (timestamptz, default now()) — bumped explicitly by PATCH /notes/:id
 - RLS: select/insert/update/delete all gated on auth.uid() = user_id
@@ -306,9 +460,20 @@ Many-to-many join — holds both materials and notes.
 
 ## Key Technical Decisions
 - ⚠️ `fileUrl()` in lib/api.ts is ASYNC — must always be awaited
-- Sessions are hybrid-synced: AsyncStorage cache (immediate, offline-safe) + parallel Supabase POST
+- Sessions are SQLite-canonical when SQLite is available
+  (`sync_status='pending_create'` → outbox → server). Safari/Firefox
+  without SAB use the legacy in-memory React-state + AsyncStorage
+  path; on every other platform `useLiveSessions` is the source and
+  AsyncStorage is untouched.
 - PDF and note sessions share the study_sessions table
-- Annotations stored locally in AsyncStorage (not Supabase DB)
+- Annotations are local-only and SQLite-canonical (`annotations`
+  table). The Safari/Firefox fallback still writes to
+  `@Tarkeez/annos/{userId}/{materialId}`; the backfill drains it on
+  first boot once SQLite is available. There is no cloud-sync path.
+- Drawing strokes are NOT stored in SQLite. The strokes store
+  (`db/strokesStore.ts`) holds them on the filesystem (native) or
+  in OPFS/IndexedDB (Chromium web). SQLite carries only the
+  manifest columns on `notes`.
 - All tables have Row Level Security (RLS) enabled
 - Storage bucket is private — always use signed URLs, never public URLs
 - profiles table auto-populated via trigger on auth.users insert
@@ -322,11 +487,13 @@ Many-to-many join — holds both materials and notes.
 - Profile management (name, email, photo, password update)
 - PDF material upload and viewing
 - Study session recording and tracking
-- PDF annotations and highlights (stored locally)
+- PDF annotations and highlights (stored locally in SQLite)
 - Cross-device file access via Supabase Storage signed URLs
 - Built-in rich text notes (Supabase-synced, addable to collections)
 - Collections (group materials and notes)
-- Drawing canvas in notes
+- Drawing canvas in notes (filesystem + OPFS strokes store)
+- Offline-first SQLite layer with outbox push (`db/sync.ts`) and
+  timed pull (`db/pull.ts`) — Milestones 0–9 complete
 
 ---
 

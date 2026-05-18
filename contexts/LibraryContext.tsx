@@ -9,10 +9,66 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform } from "react-native";
 
 import { useAuth } from "./AuthContext";
-import { api, fileUrl } from "@/lib/api";
+import { runBackfillForUser } from "@/db/backfill";
+import { db } from "@/db/client";
+import {
+  insertPendingCMRowLocal,
+  softDeleteCMRowLocal,
+  softDeleteCMRowsByCollectionLocal,
+  softDeleteCMRowsByMaterialLocal,
+  softDeleteCMRowsByNoteLocal,
+  syntheticCMId,
+  upsertCMRowsFromServer,
+  useLiveCMRows,
+} from "@/db/repositories/collectionMaterials";
+import {
+  insertPendingCollectionLocal,
+  softDeleteCollectionLocal,
+  updateCollectionLocalPending,
+  upsertCollectionsFromServer,
+  useLiveCollections,
+} from "@/db/repositories/collections";
+import {
+  getMaterialLocal,
+  insertPendingMaterialLocal,
+  softDeleteMaterialLocal,
+  updateMaterialLocalPending,
+  upsertMaterialsFromServer,
+  useLiveMaterials,
+} from "@/db/repositories/materials";
+import {
+  findNotesWithDirtyStrokes,
+  insertPendingNoteLocal,
+  setNoteStrokesManifest,
+  softDeleteNoteLocal,
+  updateNoteLocalPending,
+  upsertNotesFromServer,
+  useLiveNotes,
+} from "@/db/repositories/notes";
+import {
+  loadAnnotationsByMaterial,
+  replaceAnnotationsForMaterial,
+} from "@/db/repositories/annotations";
+import {
+  deleteStrokesFile,
+  readStrokesFile,
+  writeStrokesFile,
+} from "@/db/strokesStore";
+import {
+  deleteSessionsByMaterialLocal,
+  deleteSessionsByNoteLocal,
+  insertPendingSessionLocal,
+  upsertSessionsFromServer,
+  useLiveSessions,
+} from "@/db/repositories/sessions";
+import { startPull, stopPull } from "@/db/pull";
+import {
+  enqueue as enqueueOutbox,
+  enqueueOutboxIfNoPending,
+} from "@/db/sync";
+import { MAX_MATERIAL_BYTES, api, fileUrl } from "@/lib/api";
 
 export type Material = {
   id: string;
@@ -340,39 +396,116 @@ async function downloadToCache(materialId: string, dest: string) {
 
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [cmRows, setCmRows] = useState<CMRow[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // React state — drives web (no SQLite) and holds note drawingStrokes the
+  // strokes-fallback path consults. On native the exposed lists below come
+  // from SQLite via useLiveQuery; this state is still maintained for the
+  // strokes fallback and removed in M9.
+  const [webMaterials, setWebMaterials] = useState<Material[]>([]);
+  const [webCollections, setWebCollections] = useState<Collection[]>([]);
+  const [webCmRows, setWebCmRows] = useState<CMRow[]>([]);
+  const [webNotes, setWebNotes] = useState<Note[]>([]);
+  const [webSessions, setWebSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Live SQLite views — return [] on web (no DB) and on logout (no user).
+  const liveMaterials = useLiveMaterials(user?.id);
+  const liveCollections = useLiveCollections(user?.id);
+  const liveCmRows = useLiveCMRows(user?.id);
+  const liveNotes = useLiveNotes(user?.id);
+  const liveSessions = useLiveSessions(user?.id);
+
+  // Selectors — what the rest of the provider and the context consumers see.
+  const materials = db ? liveMaterials : webMaterials;
+  const collections = db ? liveCollections : webCollections;
+  const cmRows = db ? liveCmRows : webCmRows;
+  const notes = db ? liveNotes : webNotes;
+  const sessions = db ? liveSessions : webSessions;
 
   const refreshMaterials = useCallback(async () => {
     const res = await api<{ materials: ApiMaterial[] }>("/materials");
-    setMaterials(res.materials.map(fromApi));
-  }, []);
+    setWebMaterials(res.materials.map(fromApi));
+    if (user) {
+      try {
+        await upsertMaterialsFromServer(
+          res.materials.map((m) => ({
+            id: m.id,
+            userId: user.id,
+            title: m.title,
+            fileName: m.fileName ?? null,
+            mimeType: m.mimeType ?? null,
+            sizeBytes: m.sizeBytes ?? null,
+            totalPages: m.totalPages ?? null,
+            currentPage: m.currentPage,
+            createdAt: new Date(m.createdAt).getTime(),
+            updatedAt: new Date(m.updatedAt).getTime(),
+          })),
+        );
+      } catch (err) {
+        console.warn("[db] materials dual-write failed", err);
+      }
+    }
+  }, [user]);
 
   const refreshCollections = useCallback(async () => {
     const [collectionsRes, cmRes] = await Promise.all([
       api<{ collections: ApiCollection[] }>("/collections"),
       api<{ rows: ApiCMRow[] }>("/collection-materials"),
     ]);
-    setCollections(collectionsRes.collections.map(collectionFromApi));
-    setCmRows(cmRes.rows.map(cmRowFromApi));
-  }, []);
+    setWebCollections(collectionsRes.collections.map(collectionFromApi));
+    setWebCmRows(cmRes.rows.map(cmRowFromApi));
+    if (user) {
+      try {
+        await upsertCollectionsFromServer(
+          collectionsRes.collections.map((c) => ({
+            id: c.id,
+            userId: user.id,
+            name: c.name,
+            createdAt: new Date(c.createdAt).getTime(),
+            updatedAt: new Date(c.createdAt).getTime(),
+          })),
+        );
+        await upsertCMRowsFromServer(
+          cmRes.rows.map((r) => ({
+            collectionId: r.collectionId,
+            materialId: r.materialId ?? null,
+            noteId: r.noteId ?? null,
+            addedAt: new Date(r.addedAt).getTime(),
+          })),
+        );
+      } catch (err) {
+        console.warn("[db] collections dual-write failed", err);
+      }
+    }
+  }, [user]);
 
   const refreshNotes = useCallback(async () => {
     const res = await api<{ notes: ApiNote[] }>("/notes");
-    setNotes(res.notes.map(noteFromApi));
-  }, []);
+    setWebNotes(res.notes.map(noteFromApi));
+    if (user) {
+      try {
+        await upsertNotesFromServer(
+          res.notes.map((n) => ({
+            id: n.id,
+            userId: user.id,
+            title: n.title,
+            contentHtml: n.contentHtml ?? "",
+            createdAt: new Date(n.createdAt).getTime(),
+            updatedAt: new Date(n.updatedAt).getTime(),
+          })),
+        );
+      } catch (err) {
+        console.warn("[db] notes dual-write failed", err);
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
-      setMaterials([]);
-      setCollections([]);
-      setCmRows([]);
-      setNotes([]);
-      setSessions([]);
+      setWebMaterials([]);
+      setWebCollections([]);
+      setWebCmRows([]);
+      setWebNotes([]);
+      setWebSessions([]);
       setIsLoading(false);
       return;
     }
@@ -384,21 +517,33 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           refreshMaterials(),
           refreshCollections(),
           refreshNotes(),
-          AsyncStorage.getItem(sessionsKey(user.id)),
+          // AsyncStorage session cache hydrates only the !db Safari/Firefox
+          // path; when SQLite is available `useLiveSessions` is canonical.
+          db
+            ? Promise.resolve<string | null>(null)
+            : AsyncStorage.getItem(sessionsKey(user.id)),
         ]);
         if (cancelled) return;
-        const cached = sRaw ? (JSON.parse(sRaw) as Session[]) : [];
-        setSessions(cached);
+        if (!db) {
+          const cached = sRaw ? (JSON.parse(sRaw) as Session[]) : [];
+          setWebSessions(cached);
+        }
       } catch {
         if (!cancelled) {
-          setMaterials([]);
-          setCollections([]);
-          setCmRows([]);
-          setNotes([]);
-          setSessions([]);
+          setWebMaterials([]);
+          setWebCollections([]);
+          setWebCmRows([]);
+          setWebNotes([]);
+          setWebSessions([]);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
+      }
+      if (cancelled) return;
+      try {
+        await runBackfillForUser(user.id);
+      } catch (err) {
+        console.warn("[db] backfill failed", err);
       }
     })();
     return () => {
@@ -421,20 +566,51 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         return; // offline — keep local cache
       }
       if (cancelled) return;
-      setSessions((prev) => {
-        const dbIds = new Set(dbSessions.map((s) => s.id));
-        const pending = prev.filter(
-          (s) => s.pendingSync && !dbIds.has(s.id),
+      // !db (Safari/Firefox fallback) keeps React state + AsyncStorage in sync
+      // since useLiveSessions returns []. When SQLite is available, the post-
+      // API upsert below feeds the live query and we skip the legacy mirror.
+      if (!db) {
+        setWebSessions((prev) => {
+          const dbIds = new Set(dbSessions.map((s) => s.id));
+          const pending = prev.filter(
+            (s) => s.pendingSync && !dbIds.has(s.id),
+          );
+          const merged = [...dbSessions, ...pending].sort(
+            (a, b) => b.startedAt - a.startedAt,
+          );
+          AsyncStorage.setItem(
+            sessionsKey(user.id),
+            JSON.stringify(merged),
+          ).catch(() => {});
+          return merged;
+        });
+      }
+      try {
+        await upsertSessionsFromServer(
+          dbSessions
+            .filter((s) => (s.materialId == null) !== (s.noteId == null))
+            .map((s) => ({
+              id: s.id,
+              userId: user.id,
+              materialId: s.materialId,
+              noteId: s.noteId,
+              startedAt: s.startedAt,
+              endedAt: s.endedAt,
+              durationSec: s.durationSec,
+              pausedSec: s.pausedSec ?? 0,
+              pagesRead: s.pagesRead ?? null,
+              pageTimes: s.pageTimes ?? null,
+              selections: s.selections ?? null,
+              wordsAdded: s.wordsAdded ?? null,
+              keystrokes: s.keystrokes ?? null,
+              strokesAdded: s.strokesAdded ?? null,
+              createdAt: s.endedAt,
+              pendingSync: false,
+            })),
         );
-        const merged = [...dbSessions, ...pending].sort(
-          (a, b) => b.startedAt - a.startedAt,
-        );
-        AsyncStorage.setItem(
-          sessionsKey(user.id),
-          JSON.stringify(merged),
-        ).catch(() => {});
-        return merged;
-      });
+      } catch (err) {
+        console.warn("[db] sessions dual-write failed", err);
+      }
       // Retry pending in background.
       const stillPending = dbSessions.length
         ? []
@@ -446,98 +622,159 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
+  // Periodic pull: on app foreground, network reconnect, and a 60s
+  // heartbeat. The LWW guard inside `upsertXFromServer` protects local
+  // pending mutations from being overwritten. Tombstone detection deletes
+  // synced rows that the server no longer has.
+  useEffect(() => {
+    if (!user || !db) return;
+    startPull(user.id);
+    return () => stopPull();
+  }, [user]);
+
+  // Boot-time recovery for the strokes pipeline: scan for notes with
+  // strokes_dirty_at set (backfill, killed-mid-debounce, or a previous failed
+  // push) and enqueue one outbox row per dirty note. Runs on every SQLite
+  // platform (native + Chromium web); the !db Safari/Firefox path keeps
+  // strokes in AsyncStorage and never reaches this scan.
+  useEffect(() => {
+    if (!user || !db) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const dirty = await findNotesWithDirtyStrokes(user.id);
+        if (cancelled) return;
+        for (const row of dirty) {
+          if (cancelled) break;
+          try {
+            await enqueueOutboxIfNoPending(
+              "note_strokes",
+              row.id,
+              "update",
+              { noteId: row.id },
+            );
+          } catch (err) {
+            console.warn("[db] enqueue dirty strokes failed", err);
+          }
+        }
+      } catch (err) {
+        console.warn("[db] dirty strokes scan failed", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // Mirrors session list state to React state + AsyncStorage only when
+  // SQLite is unavailable (Safari/Firefox legacy path). When db != null the
+  // SQLite row plus `useLiveSessions` is canonical; AsyncStorage is unused.
   const persistSessions = useCallback(
     async (next: Session[]) => {
       if (!user) return;
-      setSessions(next);
+      if (db) return;
+      setWebSessions(next);
       await AsyncStorage.setItem(sessionsKey(user.id), JSON.stringify(next));
     },
     [user],
   );
 
-  // Best-effort retry of any pendingSync sessions whenever we re-hydrate or
-  // recordSession completes. Drains pending entries one at a time.
-  const retryPendingSessions = useCallback(async () => {
-    if (!user) return;
-    const queue = sessions.filter((s) => s.pendingSync);
-    if (queue.length === 0) return;
-    let changed = false;
-    const updated = [...sessions];
-    for (const s of queue) {
-      try {
-        await api<{ session: ApiSession }>("/sessions", {
-          method: "POST",
-          json: { session: sessionToApi(s) },
-        });
-        const idx = updated.findIndex((x) => x.id === s.id);
-        if (idx !== -1) {
-          const { pendingSync: _drop, ...rest } = updated[idx];
-          updated[idx] = rest;
-          changed = true;
-        }
-      } catch {
-        /* leave pendingSync set; try again next time */
-      }
-    }
-    if (changed) {
-      setSessions(updated);
-      AsyncStorage.setItem(
-        sessionsKey(user.id),
-        JSON.stringify(updated),
-      ).catch(() => {});
-    }
-  }, [user, sessions]);
-
-  useEffect(() => {
-    if (!user) return;
-    if (!sessions.some((s) => s.pendingSync)) return;
-    const t = setTimeout(() => retryPendingSessions(), 4000);
-    return () => clearTimeout(t);
-  }, [user, sessions, retryPendingSessions]);
-
   const addMaterial = useCallback(
     async ({ title, fileUri, fileName, mimeType }: AddMaterialInput) => {
-      const form = new FormData();
-      form.append("title", title.trim() || fileName.replace(/\.pdf$/i, ""));
-      if (Platform.OS === "web") {
-        // Browser FormData needs a real Blob/File — the picker hands us a
-        // `blob:` URL we fetch back into bytes, wrapped in a File so .name
-        // and .type survive the upload handler.
+      if (!user) throw new Error("Not signed in");
+      const id = uuidV4();
+      const now = Date.now();
+      const cleanTitle = title.trim() || fileName.replace(/\.pdf$/i, "");
+      const mt = mimeType || "application/pdf";
+
+      // Web fallback: no SQLite, no outbox. Keep the synchronous FormData
+      // upload path until M8 enables wa-sqlite on web.
+      if (!db) {
+        const form = new FormData();
+        form.append("title", cleanTitle);
         const blob = await (await fetch(fileUri)).blob();
-        const webFile = new File([blob], fileName, {
-          type: mimeType || "application/pdf",
-        });
+        const webFile = new File([blob], fileName, { type: mt });
         form.append("file", webFile);
-      } else {
-        // React Native FormData accepts { uri, name, type } objects.
-        form.append("file", {
-          uri: fileUri,
-          name: fileName,
-          type: mimeType || "application/pdf",
-        } as unknown as Blob);
+        const res = await api<{ material: ApiMaterial }>("/materials", {
+          method: "POST",
+          formData: form,
+        });
+        const m = fromApi(res.material);
+        setWebMaterials((prev) => [m, ...prev]);
+        return m;
       }
 
-      const res = await api<{ material: ApiMaterial }>("/materials", {
-        method: "POST",
-        formData: form,
-      });
-      const m = fromApi(res.material);
+      // 1. Copy PDF into our cache at the canonical path (keyed by the
+      //    client-generated materialId, not the user-supplied fileName).
+      const dest = cachePath(user.id, id);
+      if (!dest) throw new Error("File system unavailable");
+      try {
+        await ensureCacheDir(user.id);
+        await FileSystem.copyAsync({ from: fileUri, to: dest });
+      } catch (err) {
+        throw new Error(`Could not copy PDF into local cache: ${String(err)}`);
+      }
 
-      // Seed local cache from the just-picked file so we don't re-download
-      if (user && Platform.OS !== "web") {
-        const dest = cachePath(user.id, m.id);
-        if (dest) {
-          try {
-            await ensureCacheDir(user.id);
-            await FileSystem.copyAsync({ from: fileUri, to: dest });
-          } catch {
-            /* will re-download on demand */
-          }
+      // 2. Read size from the local copy (picker URI may not have provided it).
+      let sizeBytes = 0;
+      try {
+        const info = await FileSystem.getInfoAsync(dest);
+        if (info.exists) {
+          const maybeSize = (info as { size?: number }).size;
+          sizeBytes = maybeSize ?? 0;
         }
+      } catch {
+        /* leave 0 */
+      }
+      if (sizeBytes > MAX_MATERIAL_BYTES) {
+        try {
+          await FileSystem.deleteAsync(dest, { idempotent: true });
+        } catch {
+          /* ignore */
+        }
+        throw new Error(
+          `This PDF is too large. Materials must be ${
+            MAX_MATERIAL_BYTES / (1024 * 1024)
+          } MB or less.`,
+        );
       }
 
-      setMaterials((prev) => [m, ...prev]);
-      return m;
+      // 3. Optimistic library state.
+      const material: Material = {
+        id,
+        title: cleanTitle,
+        fileName,
+        totalPages: undefined,
+        currentPage: 1,
+        createdAt: now,
+        sizeBytes,
+      };
+      setWebMaterials((prev) => [material, ...prev]);
+      try {
+        await insertPendingMaterialLocal({
+          id,
+          userId: user.id,
+          title: cleanTitle,
+          fileName,
+          mimeType: mt,
+          sizeBytes,
+          totalPages: null,
+          currentPage: 1,
+          localFilePath: dest,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err) {
+        console.warn("[db] addMaterial local write failed", err);
+      }
+
+      // 4. Outbox push: handler uploads to Storage + inserts metadata.
+      try {
+        await enqueueOutbox("materials", id, "create", { id });
+      } catch (err) {
+        console.warn("[db] enqueue material create failed", err);
+      }
+      return material;
     },
     [user],
   );
@@ -549,25 +786,51 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       if (patch.totalPages !== undefined) body.totalPages = patch.totalPages;
       if (patch.currentPage !== undefined) body.currentPage = patch.currentPage;
       if (Object.keys(body).length === 0) return;
-      const res = await api<{ material: ApiMaterial }>(`/materials/${id}`, {
-        method: "PATCH",
-        json: body,
-      });
-      const updated = fromApi(res.material);
-      setMaterials((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      const now = Date.now();
+
+      if (!db) {
+        const res = await api<{ material: ApiMaterial }>(`/materials/${id}`, {
+          method: "PATCH",
+          json: body,
+        });
+        const updated = fromApi(res.material);
+        setWebMaterials((prev) =>
+          prev.map((m) => (m.id === id ? updated : m)),
+        );
+        return;
+      }
+
+      setWebMaterials((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+      );
+      try {
+        await updateMaterialLocalPending({
+          id,
+          title: patch.title,
+          totalPages: patch.totalPages ?? undefined,
+          currentPage: patch.currentPage,
+          updatedAt: now,
+        });
+      } catch (err) {
+        console.warn("[db] updateMaterial local write failed", err);
+      }
+      try {
+        await enqueueOutboxIfNoPending("materials", id, "update", { id });
+      } catch (err) {
+        console.warn("[db] enqueue material update failed", err);
+      }
     },
     [],
   );
 
   const deleteMaterial = useCallback(
     async (id: string) => {
-      await api(`/materials/${id}`, { method: "DELETE" });
-      setMaterials((prev) => prev.filter((m) => m.id !== id));
-      // FK cascade handles the DB; mirror it locally so the UI is consistent.
-      setCmRows((prev) => prev.filter((r) => r.materialId !== id));
-      const nextSessions = sessions.filter((s) => s.materialId !== id);
-      await persistSessions(nextSessions);
-      if (user) {
+      if (!user) return;
+
+      if (!db) {
+        await api(`/materials/${id}`, { method: "DELETE" });
+        setWebMaterials((prev) => prev.filter((m) => m.id !== id));
+        setWebCmRows((prev) => prev.filter((r) => r.materialId !== id));
         const dest = cachePath(user.id, id);
         if (dest) {
           try {
@@ -576,6 +839,46 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
             /* ignore */
           }
         }
+        const nextSessions = sessions.filter((s) => s.materialId !== id);
+        await persistSessions(nextSessions);
+        return;
+      }
+
+      // Capture fileName BEFORE soft-delete so the handler payload is
+      // self-contained even if the local row is later hard-deleted.
+      const local = await getMaterialLocal(id);
+      const fileName = local?.fileName ?? null;
+
+      setWebMaterials((prev) => prev.filter((m) => m.id !== id));
+      setWebCmRows((prev) => prev.filter((r) => r.materialId !== id));
+      try {
+        await softDeleteMaterialLocal(id);
+        await softDeleteCMRowsByMaterialLocal(id);
+        await deleteSessionsByMaterialLocal(id);
+      } catch (err) {
+        console.warn("[db] deleteMaterial local write failed", err);
+      }
+
+      // Cached PDF is dead weight after soft-delete; free disk now.
+      const dest = cachePath(user.id, id);
+      if (dest) {
+        try {
+          await FileSystem.deleteAsync(dest, { idempotent: true });
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // SQLite + useLiveSessions is canonical when db != null;
+      // deleteSessionsByMaterialLocal above already removed the rows.
+
+      try {
+        await enqueueOutbox("materials", id, "delete", {
+          userId: user.id,
+          fileName,
+        });
+      } catch (err) {
+        console.warn("[db] enqueue material delete failed", err);
       }
     },
     [sessions, persistSessions, user],
@@ -583,31 +886,48 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const recordSession = useCallback(
     async (s: Omit<Session, "id">) => {
+      if (!user) return;
       const session: Session = { ...s, id: uuidV4() };
-      // Optimistic local write — always succeeds.
       const localFirst: Session = { ...session, pendingSync: true };
+      // !db (Safari/Firefox legacy): persist to React state + AsyncStorage
+      // and return. When db != null persistSessions is a no-op and we fall
+      // through to the SQLite + outbox path.
       const next = [localFirst, ...sessions];
       await persistSessions(next);
-      // Cloud write — best effort. Clear pendingSync on success.
+      if (!db) return;
+      // Optimistic SQLite insert with pending_create status.
       try {
-        await api<{ session: ApiSession }>("/sessions", {
-          method: "POST",
-          json: { session: sessionToApi(session) },
+        await insertPendingSessionLocal({
+          id: session.id,
+          userId: user.id,
+          materialId: session.materialId,
+          noteId: session.noteId,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          durationSec: session.durationSec,
+          pausedSec: session.pausedSec ?? 0,
+          pagesRead: session.pagesRead ?? null,
+          pageTimes: session.pageTimes ?? null,
+          selections: session.selections ?? null,
+          wordsAdded: session.wordsAdded ?? null,
+          keystrokes: session.keystrokes ?? null,
+          strokesAdded: session.strokesAdded ?? null,
+          createdAt: session.endedAt,
+          pendingSync: true,
         });
-        setSessions((prev) => {
-          const updated = prev.map((x) =>
-            x.id === session.id ? { ...x, pendingSync: undefined } : x,
-          );
-          if (user) {
-            AsyncStorage.setItem(
-              sessionsKey(user.id),
-              JSON.stringify(updated),
-            ).catch(() => {});
-          }
-          return updated;
-        });
-      } catch {
-        /* leave pendingSync flag; the retry effect will pick it up */
+      } catch (err) {
+        console.warn("[db] insertPendingSession failed", err);
+      }
+      // Enqueue outbox row — push worker POSTs and flips status to synced.
+      try {
+        await enqueueOutbox(
+          "study_sessions",
+          session.id,
+          "create",
+          sessionToApi(session),
+        );
+      } catch (err) {
+        console.warn("[db] enqueue session failed", err);
       }
     },
     [sessions, persistSessions, user],
@@ -618,38 +938,135 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [materials],
   );
 
-  const createCollection = useCallback(async (name: string) => {
-    const res = await api<{ collection: ApiCollection }>("/collections", {
-      method: "POST",
-      json: { name },
-    });
-    const c = collectionFromApi(res.collection);
-    setCollections((prev) => [c, ...prev]);
-    return c;
-  }, []);
+  const createCollection = useCallback(
+    async (name: string) => {
+      if (!user) throw new Error("Not signed in");
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Name is required");
+      const id = uuidV4();
+      const now = Date.now();
+      const c: Collection = { id, name: trimmed, createdAt: now };
 
-  const updateCollection = useCallback(async (id: string, name: string) => {
-    const res = await api<{ collection: ApiCollection }>(`/collections/${id}`, {
-      method: "PATCH",
-      json: { name },
-    });
-    const updated = collectionFromApi(res.collection);
-    setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
-  }, []);
+      // Web fallback: no SQLite — call server directly and store the
+      // canonical row in React state. Used until M8 enables wa-sqlite.
+      if (!db) {
+        const res = await api<{ collection: ApiCollection }>("/collections", {
+          method: "POST",
+          json: { id, name: trimmed },
+        });
+        const fromServer = collectionFromApi(res.collection);
+        setWebCollections((prev) => [fromServer, ...prev]);
+        return fromServer;
+      }
+
+      setWebCollections((prev) => [c, ...prev]);
+      try {
+        await insertPendingCollectionLocal({
+          id,
+          userId: user.id,
+          name: trimmed,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err) {
+        console.warn("[db] createCollection local write failed", err);
+      }
+      try {
+        await enqueueOutbox("collections", id, "create", {
+          id,
+          name: trimmed,
+        });
+      } catch (err) {
+        console.warn("[db] enqueue collection create failed", err);
+      }
+      return c;
+    },
+    [user],
+  );
+
+  const updateCollection = useCallback(
+    async (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Name is required");
+      const now = Date.now();
+
+      if (!db) {
+        const res = await api<{ collection: ApiCollection }>(
+          `/collections/${id}`,
+          { method: "PATCH", json: { name: trimmed } },
+        );
+        const updated = collectionFromApi(res.collection);
+        setWebCollections((prev) =>
+          prev.map((c) => (c.id === id ? updated : c)),
+        );
+        return;
+      }
+
+      setWebCollections((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, name: trimmed } : c)),
+      );
+      try {
+        await updateCollectionLocalPending({ id, name: trimmed, updatedAt: now });
+      } catch (err) {
+        console.warn("[db] updateCollection local write failed", err);
+      }
+      try {
+        await enqueueOutbox("collections", id, "update", { id, name: trimmed });
+      } catch (err) {
+        console.warn("[db] enqueue collection update failed", err);
+      }
+    },
+    [],
+  );
 
   const deleteCollection = useCallback(async (id: string) => {
-    await api(`/collections/${id}`, { method: "DELETE" });
-    setCollections((prev) => prev.filter((c) => c.id !== id));
-    setCmRows((prev) => prev.filter((r) => r.collectionId !== id));
+    if (!db) {
+      await api(`/collections/${id}`, { method: "DELETE" });
+      setWebCollections((prev) => prev.filter((c) => c.id !== id));
+      setWebCmRows((prev) => prev.filter((r) => r.collectionId !== id));
+      return;
+    }
+
+    setWebCollections((prev) => prev.filter((c) => c.id !== id));
+    setWebCmRows((prev) => prev.filter((r) => r.collectionId !== id));
+    try {
+      await softDeleteCollectionLocal(id);
+      await softDeleteCMRowsByCollectionLocal(id);
+    } catch (err) {
+      console.warn("[db] deleteCollection local write failed", err);
+    }
+    try {
+      await enqueueOutbox("collections", id, "delete", { id });
+    } catch (err) {
+      console.warn("[db] enqueue collection delete failed", err);
+    }
   }, []);
 
   const addMaterialToCollection = useCallback(
     async (materialId: string, collectionId: string) => {
-      await api("/collection-materials", {
-        method: "POST",
-        json: { collectionId, materialId },
-      });
-      setCmRows((prev) => {
+      const addedAt = Date.now();
+      const cmPayload = { collectionId, materialId, noteId: null };
+
+      if (!db) {
+        await api("/collection-materials", {
+          method: "POST",
+          json: { collectionId, materialId },
+        });
+        setWebCmRows((prev) => {
+          if (
+            prev.some(
+              (r) =>
+                r.collectionId === collectionId && r.materialId === materialId,
+            )
+          ) {
+            return prev;
+          }
+          return [...prev, { collectionId, materialId, noteId: null, addedAt }];
+        });
+        return;
+      }
+
+      setWebCmRows((prev) => {
         if (
           prev.some(
             (r) => r.collectionId === collectionId && r.materialId === materialId,
@@ -657,29 +1074,72 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         ) {
           return prev;
         }
-        return [
-          ...prev,
-          { collectionId, materialId, noteId: null, addedAt: Date.now() },
-        ];
+        return [...prev, { collectionId, materialId, noteId: null, addedAt }];
       });
+      try {
+        await insertPendingCMRowLocal({
+          collectionId,
+          materialId,
+          noteId: null,
+          addedAt,
+        });
+      } catch (err) {
+        console.warn("[db] addMaterialToCollection local write failed", err);
+      }
+      try {
+        await enqueueOutbox(
+          "collection_materials",
+          syntheticCMId(collectionId, { materialId }),
+          "create",
+          cmPayload,
+        );
+      } catch (err) {
+        console.warn("[db] enqueue CM create failed", err);
+      }
     },
     [],
   );
 
   const removeMaterialFromCollection = useCallback(
     async (materialId: string, collectionId: string) => {
-      await api(
-        `/collection-materials/material/${collectionId}/${materialId}`,
-        {
-          method: "DELETE",
-        },
-      );
-      setCmRows((prev) =>
+      if (!db) {
+        await api(
+          `/collection-materials/material/${collectionId}/${materialId}`,
+          { method: "DELETE" },
+        );
+        setWebCmRows((prev) =>
+          prev.filter(
+            (r) =>
+              !(r.collectionId === collectionId && r.materialId === materialId),
+          ),
+        );
+        return;
+      }
+
+      setWebCmRows((prev) =>
         prev.filter(
           (r) =>
             !(r.collectionId === collectionId && r.materialId === materialId),
         ),
       );
+      try {
+        await softDeleteCMRowLocal(collectionId, { materialId });
+      } catch (err) {
+        console.warn(
+          "[db] removeMaterialFromCollection local write failed",
+          err,
+        );
+      }
+      try {
+        await enqueueOutbox(
+          "collection_materials",
+          syntheticCMId(collectionId, { materialId }),
+          "delete",
+          { collectionId, materialId, noteId: null },
+        );
+      } catch (err) {
+        console.warn("[db] enqueue CM delete failed", err);
+      }
     },
     [],
   );
@@ -717,15 +1177,57 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const createNote = useCallback(
     async (title?: string, contentHtml?: string) => {
-      const res = await api<{ note: ApiNote }>("/notes", {
-        method: "POST",
-        json: { title, contentHtml },
-      });
-      const n = noteFromApi(res.note);
-      setNotes((prev) => [n, ...prev]);
-      return n;
+      if (!user) throw new Error("Not signed in");
+      const id = uuidV4();
+      const now = Date.now();
+      const note: Note = {
+        id,
+        title: title ?? "Untitled",
+        contentHtml: contentHtml ?? "",
+        drawingStrokes: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (!db) {
+        const res = await api<{ note: ApiNote }>("/notes", {
+          method: "POST",
+          json: {
+            id,
+            title: note.title,
+            contentHtml: note.contentHtml,
+          },
+        });
+        const fromServer = noteFromApi(res.note);
+        setWebNotes((prev) => [fromServer, ...prev]);
+        return fromServer;
+      }
+
+      setWebNotes((prev) => [note, ...prev]);
+      try {
+        await insertPendingNoteLocal({
+          id,
+          userId: user.id,
+          title: note.title,
+          contentHtml: note.contentHtml,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err) {
+        console.warn("[db] createNote local write failed", err);
+      }
+      try {
+        await enqueueOutbox("notes", id, "create", {
+          id,
+          title: note.title,
+          contentHtml: note.contentHtml,
+        });
+      } catch (err) {
+        console.warn("[db] enqueue note create failed", err);
+      }
+      return note;
     },
-    [],
+    [user],
   );
 
   const updateNote = useCallback(
@@ -734,21 +1236,44 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       patch: {
         title?: string;
         contentHtml?: string;
-        drawingStrokes?: Stroke[];
       },
     ): Promise<void> => {
       const body: Record<string, unknown> = {};
       if (patch.title !== undefined) body.title = patch.title;
       if (patch.contentHtml !== undefined) body.contentHtml = patch.contentHtml;
-      if (patch.drawingStrokes !== undefined)
-        body.drawingStrokes = patch.drawingStrokes;
       if (Object.keys(body).length === 0) return;
-      const res = await api<{ note: ApiNote }>(`/notes/${id}`, {
-        method: "PATCH",
-        json: body,
-      });
-      const updated = noteFromApi(res.note);
-      setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      const now = Date.now();
+
+      if (!db) {
+        const res = await api<{ note: ApiNote }>(`/notes/${id}`, {
+          method: "PATCH",
+          json: body,
+        });
+        const updated = noteFromApi(res.note);
+        setWebNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+        return;
+      }
+
+      setWebNotes((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, ...patch, updatedAt: now } : n,
+        ),
+      );
+      try {
+        await updateNoteLocalPending({
+          id,
+          title: patch.title,
+          contentHtml: patch.contentHtml,
+          updatedAt: now,
+        });
+      } catch (err) {
+        console.warn("[db] updateNote local write failed", err);
+      }
+      try {
+        await enqueueOutbox("notes", id, "update", { id, ...patch });
+      } catch (err) {
+        console.warn("[db] enqueue note update failed", err);
+      }
     },
     [],
   );
@@ -758,6 +1283,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   );
   const noteStrokesPending = useRef(new Map<string, Stroke[]>());
 
+  // Strokes flush:
+  //   - When SQLite is available (native + Chromium web): enqueue one outbox
+  //     row per note. The handler reads the current file at send time so
+  //     a single queued row absorbs subsequent edits.
+  //   - When db is null (Safari/Firefox): keep the legacy PATCH path so
+  //     those browsers keep working until they reach SQLite.
   const flushNoteStrokes = useCallback(
     async (noteId: string) => {
       const timer = noteStrokesSyncTimers.current.get(noteId);
@@ -765,36 +1296,99 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(timer);
         noteStrokesSyncTimers.current.delete(noteId);
       }
+
+      if (db) {
+        try {
+          await enqueueOutboxIfNoPending(
+            "note_strokes",
+            noteId,
+            "update",
+            { noteId },
+          );
+        } catch (err) {
+          console.warn("[db] enqueue strokes flush failed", err);
+        }
+        noteStrokesPending.current.delete(noteId);
+        return;
+      }
+
       const pending = noteStrokesPending.current.get(noteId);
       if (!pending) return;
       noteStrokesPending.current.delete(noteId);
       try {
-        await updateNote(noteId, { drawingStrokes: pending });
+        const res = await api<{ note: ApiNote }>(`/notes/${noteId}`, {
+          method: "PATCH",
+          json: { drawingStrokes: pending },
+        });
+        const updated = noteFromApi(res.note);
+        setWebNotes((prev) =>
+          prev.map((n) => (n.id === noteId ? updated : n)),
+        );
       } catch {
-        /* keep local copy; next save will retry */
+        /* leave AsyncStorage copy; next save will retry */
       }
     },
-    [updateNote],
+    [],
   );
 
   const saveNoteStrokes = useCallback(
     async (noteId: string, strokes: Stroke[]) => {
       if (!user) return;
-      await AsyncStorage.setItem(
-        noteStrokesKey(user.id, noteId),
-        JSON.stringify(strokes),
-      );
-      setNotes((prev) =>
+      setWebNotes((prev) =>
         prev.map((n) =>
           n.id === noteId ? { ...n, drawingStrokes: strokes } : n,
         ),
       );
-      noteStrokesPending.current.set(noteId, strokes);
+
+      // No-SQLite fallback (Safari/Firefox without SAB): keep the legacy
+      // AsyncStorage + debounced PATCH path.
+      if (!db) {
+        try {
+          await AsyncStorage.setItem(
+            noteStrokesKey(user.id, noteId),
+            JSON.stringify(strokes),
+          );
+        } catch {
+          /* best effort */
+        }
+        noteStrokesPending.current.set(noteId, strokes);
+        const existing = noteStrokesSyncTimers.current.get(noteId);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+          noteStrokesSyncTimers.current.delete(noteId);
+          void flushNoteStrokes(noteId);
+        }, 1500);
+        noteStrokesSyncTimers.current.set(noteId, timer);
+        return;
+      }
+
+      // Native + Chromium web: write strokes file (FS on native, OPFS on web)
+      // immediately, update the manifest, debounce the outbox enqueue.
+      const writeResult = await writeStrokesFile(user.id, noteId, strokes);
+      if (!writeResult) return;
+      const dirtyAt = Date.now();
+      try {
+        await setNoteStrokesManifest(noteId, {
+          strokesFilePath: writeResult.path,
+          strokesByteSize: writeResult.byteSize,
+          strokesDirtyAt: dirtyAt,
+        });
+      } catch (err) {
+        console.warn("[db] strokes manifest update failed", err);
+      }
+
       const existing = noteStrokesSyncTimers.current.get(noteId);
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
         noteStrokesSyncTimers.current.delete(noteId);
-        flushNoteStrokes(noteId);
+        void enqueueOutboxIfNoPending(
+          "note_strokes",
+          noteId,
+          "update",
+          { noteId },
+        ).catch((err) =>
+          console.warn("[db] enqueue strokes failed", err),
+        );
       }, 1500);
       noteStrokesSyncTimers.current.set(noteId, timer);
     },
@@ -804,55 +1398,107 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const loadNoteStrokes = useCallback(
     async (noteId: string): Promise<Stroke[]> => {
       if (!user) return [];
-      const raw = await AsyncStorage.getItem(noteStrokesKey(user.id, noteId));
-      if (raw) {
-        try {
+
+      if (db) {
+        const fromFile = await readStrokesFile(user.id, noteId);
+        if (fromFile) return fromFile;
+      }
+
+      // AsyncStorage cache (pre-backfill rows that haven't yet been moved
+      // to the strokes store, plus the !db Safari/Firefox fallback path).
+      try {
+        const raw = await AsyncStorage.getItem(
+          noteStrokesKey(user.id, noteId),
+        );
+        if (raw) {
           const parsed = JSON.parse(raw) as Stroke[];
           if (Array.isArray(parsed)) return parsed;
-        } catch {
-          /* fall through to DB hydrate */
         }
-      }
-      const fromDb = notes.find((n) => n.id === noteId)?.drawingStrokes ?? [];
-      try {
-        await AsyncStorage.setItem(
-          noteStrokesKey(user.id, noteId),
-          JSON.stringify(fromDb),
-        );
       } catch {
-        /* cache best-effort */
+        /* fall through */
+      }
+
+      // React state — holds server-pulled strokes that haven't been
+      // written to the strokes store yet.
+      const fromDb =
+        webNotes.find((n) => n.id === noteId)?.drawingStrokes ?? [];
+      if (db && fromDb.length > 0) {
+        // Persist to the strokes store so subsequent reads are fast and
+        // the outbox push has somewhere to read from on reconnect.
+        const writeResult = await writeStrokesFile(user.id, noteId, fromDb);
+        if (writeResult) {
+          try {
+            await setNoteStrokesManifest(noteId, {
+              strokesFilePath: writeResult.path,
+              strokesByteSize: writeResult.byteSize,
+              strokesDirtyAt: null,
+            });
+          } catch {
+            /* best effort */
+          }
+        }
       }
       return fromDb;
     },
-    [user, notes],
+    [user, webNotes],
   );
 
   const deleteNote = useCallback(
     async (id: string) => {
+      if (!user) return;
       const timer = noteStrokesSyncTimers.current.get(id);
       if (timer) clearTimeout(timer);
       noteStrokesSyncTimers.current.delete(id);
       noteStrokesPending.current.delete(id);
-      await api(`/notes/${id}`, { method: "DELETE" });
-      setNotes((prev) => prev.filter((n) => n.id !== id));
-      setCmRows((prev) => prev.filter((r) => r.noteId !== id));
-      // FK cascade removes sessions DB-side; mirror locally so the UI is in sync.
-      setSessions((prev) => {
-        const next = prev.filter((s) => s.noteId !== id);
-        if (user) {
+
+      if (!db) {
+        await api(`/notes/${id}`, { method: "DELETE" });
+        setWebNotes((prev) => prev.filter((n) => n.id !== id));
+        setWebCmRows((prev) => prev.filter((r) => r.noteId !== id));
+        setWebSessions((prev) => {
+          const next = prev.filter((s) => s.noteId !== id);
           AsyncStorage.setItem(
             sessionsKey(user.id),
             JSON.stringify(next),
           ).catch(() => {});
-        }
-        return next;
-      });
-      if (user) {
+          return next;
+        });
         try {
           await AsyncStorage.removeItem(noteStrokesKey(user.id, id));
         } catch {
           /* ignore */
         }
+        return;
+      }
+
+      // Evict from the webNotes cache so loadNoteStrokes can't resurrect the
+      // deleted note's drawingStrokes; useLiveNotes / useLiveCMRows are the
+      // authoritative read source when db != null.
+      setWebNotes((prev) => prev.filter((n) => n.id !== id));
+      setWebCmRows((prev) => prev.filter((r) => r.noteId !== id));
+      try {
+        await softDeleteNoteLocal(id);
+        await softDeleteCMRowsByNoteLocal(id);
+        await deleteSessionsByNoteLocal(id);
+      } catch (err) {
+        console.warn("[db] deleteNote local write failed", err);
+      }
+      try {
+        await deleteStrokesFile(user.id, id);
+      } catch {
+        /* idempotent */
+      }
+      try {
+        // Defensive cleanup of any legacy AsyncStorage strokes key from
+        // pre-M9 installs that the backfill may not have drained yet.
+        await AsyncStorage.removeItem(noteStrokesKey(user.id, id));
+      } catch {
+        /* ignore */
+      }
+      try {
+        await enqueueOutbox("notes", id, "delete", { id });
+      } catch (err) {
+        console.warn("[db] enqueue note delete failed", err);
       }
     },
     [user],
@@ -865,11 +1511,28 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const addNoteToCollection = useCallback(
     async (noteId: string, collectionId: string) => {
-      await api("/collection-materials", {
-        method: "POST",
-        json: { collectionId, noteId },
-      });
-      setCmRows((prev) => {
+      const addedAt = Date.now();
+      const cmPayload = { collectionId, materialId: null, noteId };
+
+      if (!db) {
+        await api("/collection-materials", {
+          method: "POST",
+          json: { collectionId, noteId },
+        });
+        setWebCmRows((prev) => {
+          if (
+            prev.some(
+              (r) => r.collectionId === collectionId && r.noteId === noteId,
+            )
+          ) {
+            return prev;
+          }
+          return [...prev, { collectionId, materialId: null, noteId, addedAt }];
+        });
+        return;
+      }
+
+      setWebCmRows((prev) => {
         if (
           prev.some(
             (r) => r.collectionId === collectionId && r.noteId === noteId,
@@ -877,25 +1540,69 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         ) {
           return prev;
         }
-        return [
-          ...prev,
-          { collectionId, materialId: null, noteId, addedAt: Date.now() },
-        ];
+        return [...prev, { collectionId, materialId: null, noteId, addedAt }];
       });
+      try {
+        await insertPendingCMRowLocal({
+          collectionId,
+          materialId: null,
+          noteId,
+          addedAt,
+        });
+      } catch (err) {
+        console.warn("[db] addNoteToCollection local write failed", err);
+      }
+      try {
+        await enqueueOutbox(
+          "collection_materials",
+          syntheticCMId(collectionId, { noteId }),
+          "create",
+          cmPayload,
+        );
+      } catch (err) {
+        console.warn("[db] enqueue CM create failed", err);
+      }
     },
     [],
   );
 
   const removeNoteFromCollection = useCallback(
     async (noteId: string, collectionId: string) => {
-      await api(`/collection-materials/note/${collectionId}/${noteId}`, {
-        method: "DELETE",
-      });
-      setCmRows((prev) =>
+      if (!db) {
+        await api(`/collection-materials/note/${collectionId}/${noteId}`, {
+          method: "DELETE",
+        });
+        setWebCmRows((prev) =>
+          prev.filter(
+            (r) => !(r.collectionId === collectionId && r.noteId === noteId),
+          ),
+        );
+        return;
+      }
+
+      setWebCmRows((prev) =>
         prev.filter(
           (r) => !(r.collectionId === collectionId && r.noteId === noteId),
         ),
       );
+      try {
+        await softDeleteCMRowLocal(collectionId, { noteId });
+      } catch (err) {
+        console.warn(
+          "[db] removeNoteFromCollection local write failed",
+          err,
+        );
+      }
+      try {
+        await enqueueOutbox(
+          "collection_materials",
+          syntheticCMId(collectionId, { noteId }),
+          "delete",
+          { collectionId, materialId: null, noteId },
+        );
+      } catch (err) {
+        console.warn("[db] enqueue CM delete failed", err);
+      }
     },
     [],
   );
@@ -948,6 +1655,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const loadAnnotations = useCallback(
     async (materialId: string): Promise<AnnotationsByPage> => {
       if (!user) return {};
+      if (db) {
+        const fromSqlite = await loadAnnotationsByMaterial(user.id, materialId);
+        return fromSqlite as AnnotationsByPage;
+      }
       const raw = await AsyncStorage.getItem(annotationsKey(user.id, materialId));
       if (!raw) return {};
       try {
@@ -962,6 +1673,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const saveAnnotations = useCallback(
     async (materialId: string, annos: AnnotationsByPage) => {
       if (!user) return;
+      if (db) {
+        await replaceAnnotationsForMaterial(user.id, materialId, annos);
+        return;
+      }
       await AsyncStorage.setItem(
         annotationsKey(user.id, materialId),
         JSON.stringify(annos),

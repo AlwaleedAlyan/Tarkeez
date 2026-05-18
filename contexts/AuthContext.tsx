@@ -1,3 +1,4 @@
+import { AuthApiError } from "@supabase/supabase-js";
 import React, {
   createContext,
   useCallback,
@@ -9,6 +10,21 @@ import React, {
 
 import { ApiError, api, resolveAvatarUri } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+
+// A cached refresh token can be revoked/rotated server-side (logout on another
+// device, password change, theft-detection rotation). Auto-refresh then throws
+// `AuthApiError: Refresh Token Not Found` from getSession(); without a catch
+// this surfaces as an unhandled Metro ERROR. We treat it as "already signed
+// out" and scrub the local token.
+function isRefreshTokenError(err: unknown): boolean {
+  if (err instanceof AuthApiError) {
+    if (typeof err.message === "string" && /refresh token/i.test(err.message)) {
+      return true;
+    }
+    if (err.status === 400) return true;
+  }
+  return false;
+}
 
 export type PhotoTransform = {
   scale: number;
@@ -78,36 +94,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    let cancelled = false;
+
+    (async () => {
+      let session = null;
+      try {
+        const { data } = await supabase.auth.getSession();
+        session = data.session;
+      } catch (err) {
+        if (isRefreshTokenError(err)) {
+          // Scrub the bad token from AsyncStorage so the next boot is clean.
+          // scope:'local' skips the network round-trip, so this works offline.
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {
+            /* nothing else we can do */
+          }
+        } else {
+          console.warn("[auth] getSession failed", err);
+        }
+      }
+
+      if (cancelled) return;
       if (session) {
         try {
           const me = await api<MeResponse>("/auth/me");
-          setUser(await toUser(me.user));
-        } catch (e) {
-          setUser(null);
+          if (!cancelled) setUser(await toUser(me.user));
+        } catch {
+          if (!cancelled) setUser(null);
         }
       } else {
         setUser(null);
       }
-      setIsLoading(false);
-    });
+      if (!cancelled) setIsLoading(false);
+    })();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session) {
-          try {
-            const me = await api<MeResponse>("/auth/me");
-            setUser(await toUser(me.user));
-          } catch (e) {
-            setUser(null);
-          }
-        } else {
+      async (event, session) => {
+        if (event === "SIGNED_OUT" || !session) {
+          setUser(null);
+          return;
+        }
+        try {
+          const me = await api<MeResponse>("/auth/me");
+          setUser(await toUser(me.user));
+        } catch {
           setUser(null);
         }
       }
     );
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
   }, []);

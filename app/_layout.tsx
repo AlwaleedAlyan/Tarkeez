@@ -17,6 +17,12 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LibraryProvider } from "@/contexts/LibraryContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import "@/db/handlers/sessions";
+import "@/db/handlers/collections";
+import "@/db/handlers/notes";
+import "@/db/handlers/materials";
+import { useDbMigrations } from "@/db/migrate";
+import { start as startSync, stop as stopSync } from "@/db/sync";
 import { migrateStymerToTarkeez } from "@/lib/migrateLegacyStorage";
 
 SplashScreen.preventAutoHideAsync();
@@ -77,18 +83,33 @@ export default function RootLayout() {
     Inter_700Bold,
   });
   const [migrationDone, setMigrationDone] = useState(false);
+  const { success: dbReady, error: dbError } = useDbMigrations();
 
   useEffect(() => {
     migrateStymerToTarkeez().finally(() => setMigrationDone(true));
   }, []);
 
   useEffect(() => {
-    if ((fontsLoaded || fontError) && migrationDone) {
+    if (dbError) console.error("[db] migration failed", dbError);
+  }, [dbError]);
+
+  const dbBootDone = dbReady || dbError != null;
+
+  useEffect(() => {
+    if (!dbReady) return;
+    startSync();
+    return () => stopSync();
+  }, [dbReady]);
+
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && migrationDone && dbBootDone) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, migrationDone]);
+  }, [fontsLoaded, fontError, migrationDone, dbBootDone]);
 
-  if ((!fontsLoaded && !fontError) || !migrationDone) return null;
+  if ((!fontsLoaded && !fontError) || !migrationDone || !dbBootDone) {
+    return null;
+  }
 
   return (
     <SafeAreaProvider>

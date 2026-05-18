@@ -820,3 +820,27 @@ export async function removeMaterialStorage(
     .remove([filePath]);
   if (error) throw new ApiError(error.message, 400);
 }
+
+export type YouTubeClassifierVerdict = {
+  isEducational: boolean;
+  reason: string;
+};
+
+export async function classifyYouTubeVideoRemote(
+  videoId: string,
+): Promise<YouTubeClassifierVerdict> {
+  const { data, error } = await supabase.functions.invoke("classify-youtube", {
+    body: { videoId },
+  });
+  if (error) throw new ApiError(error.message, 400);
+  if (
+    !data ||
+    typeof data !== "object" ||
+    typeof (data as { isEducational?: unknown }).isEducational !== "boolean" ||
+    typeof (data as { reason?: unknown }).reason !== "string"
+  ) {
+    throw new ApiError("Malformed classify-youtube response", 502);
+  }
+  const v = data as YouTubeClassifierVerdict;
+  return { isEducational: v.isEducational, reason: v.reason };
+}

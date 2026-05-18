@@ -176,3 +176,10 @@ export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+export const youtubeClassifications = sqliteTable("youtube_classifications", {
+  videoId: text("video_id").primaryKey(),
+  isEducational: integer("is_educational", { mode: "boolean" }).notNull(),
+  reason: text("reason").notNull(),
+  classifiedAt: integer("classified_at").notNull(),
+});

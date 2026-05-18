@@ -184,3 +184,10 @@ export function stop(): void {
   heartbeatId = null;
   lastConnected = null;
 }
+
+// Test-only exports — not part of the public API.
+export const _nextDelay = nextDelay;
+export function _resetForTest(): void {
+  draining = false;
+  HANDLERS.clear();
+}

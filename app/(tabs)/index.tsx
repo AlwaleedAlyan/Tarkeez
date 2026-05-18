@@ -66,6 +66,11 @@ export default function LibraryScreen() {
     null,
   );
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [itemMenuTarget, setItemMenuTarget] = useState<{
+    kind: "material" | "note";
+    id: string;
+    title: string;
+  } | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -156,6 +161,10 @@ export default function LibraryScreen() {
   };
 
   const onMaterialMenu = (materialId: string, title: string) => {
+    if (Platform.OS === "web") {
+      setItemMenuTarget({ kind: "material", id: materialId, title });
+      return;
+    }
     Alert.alert(title, undefined, [
       { text: "Cancel", style: "cancel" },
       {
@@ -191,6 +200,10 @@ export default function LibraryScreen() {
   };
 
   const onNoteMenu = (noteId: string, title: string) => {
+    if (Platform.OS === "web") {
+      setItemMenuTarget({ kind: "note", id: noteId, title });
+      return;
+    }
     Alert.alert(title || "Untitled", undefined, [
       { text: "Cancel", style: "cancel" },
       {
@@ -393,6 +406,82 @@ export default function LibraryScreen() {
           target={pickerTarget}
           onClose={() => setPickerTarget(null)}
         />
+      ) : null}
+
+      {itemMenuTarget ? (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setItemMenuTarget(null)}
+        >
+          <Pressable
+            style={addMenuStyles.backdrop}
+            onPress={() => setItemMenuTarget(null)}
+          >
+            <Pressable
+              onPress={() => {}}
+              style={[
+                addMenuStyles.sheet,
+                {
+                  backgroundColor: colors.background,
+                  paddingBottom: insets.bottom + 16,
+                },
+              ]}
+            >
+              <Text
+                style={[addMenuStyles.title, { color: colors.foreground }]}
+                numberOfLines={2}
+              >
+                {itemMenuTarget.title || "Untitled"}
+              </Text>
+              <MenuRow
+                icon="folder-plus"
+                label="Add to collection…"
+                onPress={() => {
+                  setPickerTarget({
+                    kind: itemMenuTarget.kind,
+                    id: itemMenuTarget.id,
+                  });
+                  setItemMenuTarget(null);
+                }}
+                iconColor={colors.primary}
+                foreground={colors.foreground}
+                border={colors.border}
+              />
+              <MenuRow
+                icon="trash-2"
+                label="Delete"
+                onPress={() => {
+                  const { kind, id, title } = itemMenuTarget;
+                  setItemMenuTarget(null);
+                  if (kind === "material") confirmDeleteMaterial(id, title);
+                  else confirmDeleteNote(id, title);
+                }}
+                iconColor={colors.destructive}
+                foreground={colors.foreground}
+                border={colors.border}
+              />
+              <Pressable
+                onPress={() => setItemMenuTarget(null)}
+                style={({ pressed }) => [
+                  addMenuStyles.cancelRow,
+                  { opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    addMenuStyles.cancelLabel,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
       ) : null}
 
       <Modal

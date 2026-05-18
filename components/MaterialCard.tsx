@@ -102,7 +102,10 @@ export function MaterialCard({
 
       {onMenuPress ? (
         <Pressable
-          onPress={onMenuPress}
+          onPress={(e) => {
+            e.stopPropagation();
+            onMenuPress();
+          }}
           hitSlop={8}
           style={({ pressed }) => [
             styles.menuBtn,

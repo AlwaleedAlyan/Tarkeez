@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,18 +14,81 @@ import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
 import { fileUrl } from "@/lib/api";
 
+const MIN_SESSION_SEC = 5;
+
 export default function StudyScreenWeb() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getMaterial } = useLibrary();
+  const { getMaterial, recordSession } = useLibrary();
   const material = id ? getMaterial(id) : undefined;
 
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const topPad = Math.max(insets.top, 12);
+
+  const sessionStartRef = useRef<number>(Date.now());
+  const finalizedRef = useRef(false);
+  const pausedMsRef = useRef(0);
+  const hiddenSinceRef = useRef<number | null>(null);
+  const materialIdRef = useRef<string | null>(null);
+  materialIdRef.current = material?.id ?? null;
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        if (hiddenSinceRef.current == null) {
+          hiddenSinceRef.current = Date.now();
+        }
+      } else if (hiddenSinceRef.current != null) {
+        pausedMsRef.current += Date.now() - hiddenSinceRef.current;
+        hiddenSinceRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  const finalize = useCallback(() => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+    const materialId = materialIdRef.current;
+    if (!materialId) return;
+    const endedAt = Date.now();
+    if (hiddenSinceRef.current != null) {
+      pausedMsRef.current += endedAt - hiddenSinceRef.current;
+      hiddenSinceRef.current = null;
+    }
+    const startedAt = sessionStartRef.current;
+    const activeMs = Math.max(0, endedAt - startedAt - pausedMsRef.current);
+    const durationSec = Math.round(activeMs / 1000);
+    if (durationSec < MIN_SESSION_SEC) return;
+    const pausedSec = Math.round(pausedMsRef.current / 1000);
+    recordSession({
+      materialId,
+      noteId: null,
+      startedAt,
+      endedAt,
+      durationSec,
+      pausedSec,
+      pagesRead: 0,
+      pageTimes: {},
+      selections: 0,
+    }).catch(() => {
+      /* swallow — best effort on unmount */
+    });
+  }, [recordSession]);
+
+  useEffect(() => {
+    return () => {
+      finalize();
+    };
+  }, [finalize]);
 
   useEffect(() => {
     if (!id || !material) return;

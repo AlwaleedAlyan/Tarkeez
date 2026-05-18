@@ -415,10 +415,38 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const liveSessions = useLiveSessions(user?.id);
 
   // Selectors — what the rest of the provider and the context consumers see.
-  const materials = db ? liveMaterials : webMaterials;
-  const collections = db ? liveCollections : webCollections;
+  // For materials/notes/collections we merge the live SQLite query with the
+  // optimistic webX state: addMaterial / createNote / createCollection
+  // populate webX synchronously before navigation, but useLiveQuery has an
+  // async re-evaluation gap. Without the merge, a freshly-created row is
+  // briefly invisible to getMaterial/getNote/getCollection and the next
+  // screen renders "not found". Once the live query catches up, the Set
+  // filter drops the pending entry so the live row (with any server
+  // corrections) wins.
+  const materials = useMemo(() => {
+    if (!db) return webMaterials;
+    if (webMaterials.length === 0) return liveMaterials;
+    const liveIds = new Set(liveMaterials.map((m) => m.id));
+    const pending = webMaterials.filter((m) => !liveIds.has(m.id));
+    return pending.length === 0 ? liveMaterials : [...pending, ...liveMaterials];
+  }, [liveMaterials, webMaterials]);
+  const collections = useMemo(() => {
+    if (!db) return webCollections;
+    if (webCollections.length === 0) return liveCollections;
+    const liveIds = new Set(liveCollections.map((c) => c.id));
+    const pending = webCollections.filter((c) => !liveIds.has(c.id));
+    return pending.length === 0
+      ? liveCollections
+      : [...pending, ...liveCollections];
+  }, [liveCollections, webCollections]);
   const cmRows = db ? liveCmRows : webCmRows;
-  const notes = db ? liveNotes : webNotes;
+  const notes = useMemo(() => {
+    if (!db) return webNotes;
+    if (webNotes.length === 0) return liveNotes;
+    const liveIds = new Set(liveNotes.map((n) => n.id));
+    const pending = webNotes.filter((n) => !liveIds.has(n.id));
+    return pending.length === 0 ? liveNotes : [...pending, ...liveNotes];
+  }, [liveNotes, webNotes]);
   const sessions = db ? liveSessions : webSessions;
 
   const refreshMaterials = useCallback(async () => {

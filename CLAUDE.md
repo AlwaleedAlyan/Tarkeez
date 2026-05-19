@@ -510,15 +510,43 @@ Many-to-many join — holds both materials and notes.
 - Generated client-side as transparent PNG — no server rendering needed
 - Multiple card style options (swipeable like Strava)
 
-### URL Classifier (Browser Window)
-3-tier system — URL/domain only, never read page content:
-```
-Tier 1: Local whitelist/blacklist → instant decision
-Tier 2: Rule-based (.edu TLD, keywords in domain: learn/study/academy/course)
-Tier 3: LLM API call (only if Tier 1 & 2 inconclusive) → cache result
-```
-- Always cache classification result after first lookup (by domain, not full URL)
-- Privacy rule: domain name only — never URL path, never page content
+### URL Classifier (Browser Window) ✅
+3-tier system — URL/domain **only**, never page content. Whitelist-first
+with safety net: a whitelist hit wins immediately; otherwise the request
+falls through Tier 2 (rules) and Tier 3 (LLM). Implemented in
+`features/classifier/urlClassifier.ts`; wired into `app/browser/view.tsx`
+alongside the existing YouTube classifier (YouTube URLs still route to
+`classifyYouTubeVideo`; everything else goes to `classifyUrl`).
+
+- **Tier 1a — Whitelist** (`features/classifier/whitelist.json`, loaded
+  by `domainLists.ts`): list of known-good educational domains. Source
+  of truth is `features/classifier/whitelist-source.txt` (human-editable:
+  one URL or domain per line, `#` comments allowed). To refresh: edit
+  the source file and run `node scripts/normalize-whitelist.mjs`, then
+  commit BOTH files. Matching is suffix-based (a single
+  `khanacademy.org` entry covers every subdomain).
+- **Tier 1b — Blacklist** (`features/classifier/domainLists.ts` TS
+  module): small hand-curated set of explicit off-topic overrides.
+  Keep small — Tier 3 catches the long tail.
+- **Tier 2 — Rule-based** (`urlClassifier.ts`): TLD check (`.edu`,
+  `.ac`, `.gov`) and dot/dash-tokenized keyword match against
+  `learn`, `study`, `academy`, `course`, `university`, `college`,
+  `school`. Token-level (not substring) matching avoids false
+  positives like `learnsex.com`.
+- **Tier 3 — Gemini fallback** (Edge Function `classify-url` at
+  `supabase/functions/classify-url/index.ts`): minimal prompt with the
+  bare domain only, returns `{ educational: true|false }`. Reuses the
+  same `GEMINI_API_KEY` secret as `classify-youtube`. Client calls via
+  `classifyUrlRemote` in `lib/api.ts`.
+- **Cache**: SQLite `url_classifications` (key: normalized domain after
+  stripping `www.`/`m.`/`mobile.`) via `db/repositories/urlClassifications.ts`,
+  fronted by a module-scope `Map`. Only Tier 3 verdicts are written to
+  SQLite — Tier 1/2 are O(1) from the lists/rules so the disk cache
+  would just duplicate the source of truth.
+- **Fail-open**: offline or LLM error → educational + reason
+  `offline_optimistic` / `error_optimistic` (matches `youtubeClassifier`).
+- **Privacy**: only the bare hostname ever leaves the device. URL path,
+  query, fragment, and page content are never sent anywhere.
 
 ### YouTube Classifier
 ```

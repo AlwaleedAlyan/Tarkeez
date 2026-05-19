@@ -112,6 +112,7 @@ export const studySessions = sqliteTable(
     userId: text("user_id").notNull(),
     materialId: text("material_id"),
     noteId: text("note_id"),
+    externalUrl: text("external_url"),
     startedAt: integer("started_at").notNull(),
     endedAt: integer("ended_at").notNull(),
     durationSec: integer("duration_sec").notNull(),
@@ -128,7 +129,9 @@ export const studySessions = sqliteTable(
   (t) => [
     check(
       "ss_xor_chk",
-      sql`(${t.materialId} IS NOT NULL) <> (${t.noteId} IS NOT NULL)`,
+      sql`(CASE WHEN ${t.materialId} IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN ${t.noteId} IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN ${t.externalUrl} IS NOT NULL THEN 1 ELSE 0 END) = 1`,
     ),
     index("sessions_user_idx").on(t.userId),
     index("sessions_sync_idx")
@@ -179,6 +182,13 @@ export const meta = sqliteTable("meta", {
 
 export const youtubeClassifications = sqliteTable("youtube_classifications", {
   videoId: text("video_id").primaryKey(),
+  isEducational: integer("is_educational", { mode: "boolean" }).notNull(),
+  reason: text("reason").notNull(),
+  classifiedAt: integer("classified_at").notNull(),
+});
+
+export const urlClassifications = sqliteTable("url_classifications", {
+  domain: text("domain").primaryKey(),
   isEducational: integer("is_educational", { mode: "boolean" }).notNull(),
   reason: text("reason").notNull(),
   classifiedAt: integer("classified_at").notNull(),

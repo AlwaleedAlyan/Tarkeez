@@ -10,6 +10,7 @@ type ApiSessionRow = {
   id: string;
   materialId: string | null;
   noteId: string | null;
+  externalUrl: string | null;
   startedAt: number;
   endedAt: number;
   durationSec: number;
@@ -28,6 +29,7 @@ export type SessionUpsertInput = {
   userId: string;
   materialId: string | null;
   noteId: string | null;
+  externalUrl?: string | null;
   startedAt: number;
   endedAt: number;
   durationSec: number;
@@ -55,6 +57,7 @@ export async function upsertSessionsFromServer(
         userId: r.userId,
         materialId: r.materialId,
         noteId: r.noteId,
+        externalUrl: r.externalUrl ?? null,
         startedAt: r.startedAt,
         endedAt: r.endedAt,
         durationSec: r.durationSec,
@@ -93,6 +96,7 @@ function sessionFromRow(r: SessionRow): Session {
     id: r.id,
     materialId: r.materialId,
     noteId: r.noteId,
+    externalUrl: r.externalUrl ?? null,
     startedAt: r.startedAt,
     endedAt: r.endedAt,
     durationSec: r.durationSec,
@@ -118,6 +122,7 @@ export async function insertPendingSessionLocal(
       userId: r.userId,
       materialId: r.materialId,
       noteId: r.noteId,
+      externalUrl: r.externalUrl,
       startedAt: r.startedAt,
       endedAt: r.endedAt,
       durationSec: r.durationSec,
@@ -174,7 +179,11 @@ export async function pullSessions(userId: string): Promise<void> {
   if (!db) return;
   const res = await api<{ sessions: ApiSessionRow[] }>("/sessions");
   const validRows = res.sessions.filter(
-    (s) => (s.materialId == null) !== (s.noteId == null),
+    (s) =>
+      (s.materialId != null ? 1 : 0) +
+        (s.noteId != null ? 1 : 0) +
+        (s.externalUrl != null ? 1 : 0) ===
+      1,
   );
   await upsertSessionsFromServer(
     validRows.map((s) => ({
@@ -182,6 +191,7 @@ export async function pullSessions(userId: string): Promise<void> {
       userId,
       materialId: s.materialId,
       noteId: s.noteId,
+      externalUrl: s.externalUrl,
       startedAt: s.startedAt,
       endedAt: s.endedAt,
       durationSec: s.durationSec,
@@ -236,6 +246,7 @@ export async function upsertLocalPendingSessions(
         userId: r.userId,
         materialId: r.materialId,
         noteId: r.noteId,
+        externalUrl: r.externalUrl ?? null,
         startedAt: r.startedAt,
         endedAt: r.endedAt,
         durationSec: r.durationSec,

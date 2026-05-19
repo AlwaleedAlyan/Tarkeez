@@ -1,0 +1,49 @@
+# Tarkeez URL classifier — Tier 1 whitelist source.
+#
+# One URL or domain per line. Accepted forms (all normalize to the same domain):
+#   khanacademy.org
+#   www.khanacademy.org
+#   https://www.khanacademy.org/math/algebra
+#
+# Lines starting with `#` and blank lines are ignored. Use `#` for section
+# headers like "# Universities".
+#
+# After editing this file, run:
+#   node scripts/normalize-whitelist.mjs
+# That regenerates features/classifier/whitelist.json (sorted, deduped,
+# lowercased). Commit BOTH this file and the JSON.
+#
+# Matching is suffix-based: "khanacademy.org" also covers
+# "courses.khanacademy.org" and any other subdomain.
+
+# Online learning platforms
+khanacademy.org
+coursera.org
+edx.org
+udemy.com
+udacity.com
+duolingo.com
+brilliant.org
+
+# Reference & encyclopedias
+wikipedia.org
+wikibooks.org
+wiktionary.org
+wolframalpha.com
+
+# Universities (seed — add the full list to this file)
+mit.edu
+stanford.edu
+harvard.edu
+berkeley.edu
+
+# Programming education
+freecodecamp.org
+codecademy.com
+exercism.org
+leetcode.com
+
+# Reading / research
+arxiv.org
+scholar.google.com
+jstor.org

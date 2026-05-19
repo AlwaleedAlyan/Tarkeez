@@ -106,6 +106,7 @@ export type Session = {
   id: string;
   materialId: string | null;
   noteId: string | null;
+  externalUrl?: string | null;
   startedAt: number;
   endedAt: number;
   durationSec: number;
@@ -176,6 +177,7 @@ type ApiSession = {
   id: string;
   materialId: string | null;
   noteId: string | null;
+  externalUrl: string | null;
   startedAt: number;
   endedAt: number;
   durationSec: number;
@@ -223,6 +225,7 @@ function sessionFromApi(s: ApiSession): Session {
     id: s.id,
     materialId: s.materialId ?? null,
     noteId: s.noteId ?? null,
+    externalUrl: s.externalUrl ?? null,
     startedAt: s.startedAt,
     endedAt: s.endedAt,
     durationSec: s.durationSec,
@@ -241,6 +244,7 @@ function sessionToApi(s: Session): Omit<ApiSession, "createdAt"> {
     id: s.id,
     materialId: s.materialId,
     noteId: s.noteId,
+    externalUrl: s.externalUrl ?? null,
     startedAt: s.startedAt,
     endedAt: s.endedAt,
     durationSec: s.durationSec,
@@ -616,12 +620,19 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       try {
         await upsertSessionsFromServer(
           dbSessions
-            .filter((s) => (s.materialId == null) !== (s.noteId == null))
+            .filter(
+              (s) =>
+                (s.materialId != null ? 1 : 0) +
+                  (s.noteId != null ? 1 : 0) +
+                  (s.externalUrl != null ? 1 : 0) ===
+                1,
+            )
             .map((s) => ({
               id: s.id,
               userId: user.id,
               materialId: s.materialId,
               noteId: s.noteId,
+              externalUrl: s.externalUrl ?? null,
               startedAt: s.startedAt,
               endedAt: s.endedAt,
               durationSec: s.durationSec,
@@ -930,6 +941,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           userId: user.id,
           materialId: session.materialId,
           noteId: session.noteId,
+          externalUrl: session.externalUrl ?? null,
           startedAt: session.startedAt,
           endedAt: session.endedAt,
           durationSec: session.durationSec,

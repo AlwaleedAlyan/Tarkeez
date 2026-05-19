@@ -8,6 +8,7 @@ type SessionPushPayload = {
   id: string;
   materialId: string | null;
   noteId: string | null;
+  externalUrl: string | null;
   startedAt: number;
   endedAt: number;
   durationSec: number;

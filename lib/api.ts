@@ -497,7 +497,7 @@ export async function api<T = unknown>(
     const { data, error } = await supabase
       .from("study_sessions")
       .select(
-        "id, material_id, note_id, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
       )
       .eq("user_id", user.id)
       .order("started_at", { ascending: false });
@@ -506,6 +506,7 @@ export async function api<T = unknown>(
       id: s.id,
       materialId: s.material_id ?? null,
       noteId: s.note_id ?? null,
+      externalUrl: s.external_url ?? null,
       startedAt: Number(s.started_at),
       endedAt: Number(s.ended_at),
       durationSec: s.duration_sec,
@@ -529,15 +530,26 @@ export async function api<T = unknown>(
     const body = (opts.json ?? {}) as any;
     const session = body.session ?? body;
     if (!session?.id) throw new ApiError("session.id required", 400);
-    if (!session.materialId && !session.noteId)
-      throw new ApiError("materialId or noteId required", 400);
-    if (session.materialId && session.noteId)
-      throw new ApiError("Provide only one of materialId or noteId", 400);
+    const targetCount =
+      (session.materialId ? 1 : 0) +
+      (session.noteId ? 1 : 0) +
+      (session.externalUrl ? 1 : 0);
+    if (targetCount === 0)
+      throw new ApiError(
+        "materialId, noteId, or externalUrl required",
+        400,
+      );
+    if (targetCount > 1)
+      throw new ApiError(
+        "Provide exactly one of materialId / noteId / externalUrl",
+        400,
+      );
     const insertRow: any = {
       id: session.id,
       user_id: user.id,
       material_id: session.materialId ?? null,
       note_id: session.noteId ?? null,
+      external_url: session.externalUrl ?? null,
       started_at: session.startedAt,
       ended_at: session.endedAt,
       duration_sec: session.durationSec,
@@ -553,7 +565,7 @@ export async function api<T = unknown>(
       .from("study_sessions")
       .insert(insertRow)
       .select(
-        "id, material_id, note_id, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
       )
       .single();
     if (error) throw new ApiError(error.message, 400);
@@ -562,6 +574,7 @@ export async function api<T = unknown>(
         id: data.id,
         materialId: data.material_id ?? null,
         noteId: data.note_id ?? null,
+        externalUrl: data.external_url ?? null,
         startedAt: Number(data.started_at),
         endedAt: Number(data.ended_at),
         durationSec: data.duration_sec,
@@ -842,5 +855,29 @@ export async function classifyYouTubeVideoRemote(
     throw new ApiError("Malformed classify-youtube response", 502);
   }
   const v = data as YouTubeClassifierVerdict;
+  return { isEducational: v.isEducational, reason: v.reason };
+}
+
+export type UrlClassifierVerdict = {
+  isEducational: boolean;
+  reason: string;
+};
+
+export async function classifyUrlRemote(
+  domain: string,
+): Promise<UrlClassifierVerdict> {
+  const { data, error } = await supabase.functions.invoke("classify-url", {
+    body: { domain },
+  });
+  if (error) throw new ApiError(error.message, 400);
+  if (
+    !data ||
+    typeof data !== "object" ||
+    typeof (data as { isEducational?: unknown }).isEducational !== "boolean" ||
+    typeof (data as { reason?: unknown }).reason !== "string"
+  ) {
+    throw new ApiError("Malformed classify-url response", 502);
+  }
+  const v = data as UrlClassifierVerdict;
   return { isEducational: v.isEducational, reason: v.reason };
 }

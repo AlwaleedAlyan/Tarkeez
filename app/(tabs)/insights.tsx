@@ -17,6 +17,7 @@ import { StatTile } from "@/components/StatTile";
 import { StrokeThumbnail } from "@/components/StrokeThumbnail";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { safeHost } from "@/lib/normalizeUrl";
 
 type Metric = "pages" | "words" | "keystrokes";
 const METRIC_KEY = "@Tarkeez/insights_metric";
@@ -454,12 +455,16 @@ export default function InsightsScreen() {
             <View style={{ gap: 8 }}>
               {recent.map((s) => {
                 const sFocusPct = pct(s.durationSec, s.pausedSec ?? 0);
-                const isNote = !!s.noteId;
+                const isExternal =
+                  !s.materialId && !s.noteId && !!s.externalUrl;
+                const isNote = !isExternal && !!s.noteId;
                 const wordsAdded = s.wordsAdded ?? 0;
                 const strokesAdded = s.strokesAdded ?? 0;
 
                 let outputLabel: React.ReactNode = null;
-                if (isNote) {
+                if (isExternal) {
+                  outputLabel = safeHost(s.externalUrl!) || "web";
+                } else if (isNote) {
                   if (wordsAdded > 0 && strokesAdded === 0) {
                     outputLabel = `${wordsAdded} ${wordsAdded === 1 ? "word" : "words"}`;
                   } else if (wordsAdded === 0 && strokesAdded > 0) {
@@ -497,7 +502,9 @@ export default function InsightsScreen() {
                       ]}
                     >
                       <Feather
-                        name={isNote ? "edit-3" : "file-text"}
+                        name={
+                          isExternal ? "globe" : isNote ? "edit-3" : "file-text"
+                        }
                         size={16}
                         color={colors.primary}
                       />
@@ -507,9 +514,11 @@ export default function InsightsScreen() {
                         numberOfLines={1}
                         style={[styles.sessionTitle, { color: colors.foreground }]}
                       >
-                        {isNote
-                          ? noteName(s.noteId!) || "Untitled"
-                          : materialName(s.materialId!)}
+                        {isExternal
+                          ? "Web session"
+                          : isNote
+                            ? noteName(s.noteId!) || "Untitled"
+                            : materialName(s.materialId!)}
                       </Text>
                       <Text
                         style={[

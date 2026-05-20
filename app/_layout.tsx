@@ -23,7 +23,26 @@ import "@/db/handlers/notes";
 import "@/db/handlers/materials";
 import { useDbMigrations } from "@/db/migrate";
 import { start as startSync, stop as stopSync } from "@/db/sync";
+import { logRejection } from "@/lib/logRejection";
 import { migrateStymerToTarkeez } from "@/lib/migrateLegacyStorage";
+
+// Override Hermes's default unhandled-rejection tracker so transient network
+// failures (Supabase auto-refresh while offline, etc.) show up as labeled
+// warnings instead of red ERROR lines. Explicit `.catch` sites in our code
+// route through logRejection directly; this is the safety net for promises
+// inside third-party code (mostly @supabase/supabase-js).
+const hermes = (globalThis as { HermesInternal?: {
+  enablePromiseRejectionTracker?: (opts: {
+    allRejections: boolean;
+    onUnhandled: (id: number, err: unknown) => void;
+    onHandled: (id: number) => void;
+  }) => void;
+} }).HermesInternal;
+hermes?.enablePromiseRejectionTracker?.({
+  allRejections: true,
+  onUnhandled: (id, err) => logRejection(`unhandled#${id}`, err),
+  onHandled: () => {},
+});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -86,7 +105,9 @@ export default function RootLayout() {
   const { success: dbReady, error: dbError } = useDbMigrations();
 
   useEffect(() => {
-    migrateStymerToTarkeez().finally(() => setMigrationDone(true));
+    migrateStymerToTarkeez()
+      .catch((e) => logRejection("legacy-migrate", e))
+      .finally(() => setMigrationDone(true));
   }, []);
 
   useEffect(() => {

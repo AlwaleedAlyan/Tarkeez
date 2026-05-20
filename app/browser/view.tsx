@@ -22,29 +22,60 @@ type BrowserMessage = {
   state: "play" | "pause" | "waiting" | "ended";
 };
 
-// Installs a MutationObserver that binds play/pause/waiting/ended listeners
-// to every <video> element on the page (including ones added later by SPA
-// navigation). Posts state transitions to RN via window.ReactNativeWebView.
+const YOUTUBE_HOST_RE = /(?:^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/;
+
+// Installs a MutationObserver that binds play/pause/ended listeners to every
+// <video> element on the page (including ones added later by SPA navigation).
+// Posts state transitions to RN via window.ReactNativeWebView.
+//
+// YouTube renders the main player AND tiny autoplaying thumbnail/up-next
+// previews as separate <video> elements. We distinguish them by rendered
+// size — only videos whose bounding rect is above MIN_AREA count as real
+// playback. This works whether the user has unmuted or not (iOS WebView
+// enforces muted autoplay even on the main player).
 const INJECTED_VIDEO_LISTENER = `(function(){
   try {
     if (window.__tarkeezVideoHookInstalled) return;
     window.__tarkeezVideoHookInstalled = true;
-    var bound = new WeakSet();
+    var MIN_AREA = 80000; // ~ 320x250 — bigger than YouTube thumbnails, smaller than the main player
+    var bound = new WeakMap();
+    var playing = new Set();
+    var lastPosted = null;
     var post = function(state){
+      if (state === lastPosted) return;
+      lastPosted = state;
       try {
         window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
           JSON.stringify({ type: 'video', state: state })
         );
       } catch (e) {}
     };
+    var emit = function(){
+      post(playing.size > 0 ? 'play' : 'pause');
+    };
+    var isRealVideo = function(v){
+      try {
+        var r = v.getBoundingClientRect();
+        return (r.width * r.height) >= MIN_AREA;
+      } catch (e) { return false; }
+    };
+    var syncOne = function(v, id){
+      if (!v.paused && isRealVideo(v)) {
+        playing.add(id);
+      } else {
+        playing.delete(id);
+      }
+    };
+    var nextId = 1;
     var bind = function(v){
       if (bound.has(v)) return;
-      bound.add(v);
-      v.addEventListener('play', function(){ post('play'); });
-      v.addEventListener('pause', function(){ post('pause'); });
-      v.addEventListener('waiting', function(){ post('waiting'); });
-      v.addEventListener('ended', function(){ post('ended'); });
-      post(v.paused ? 'pause' : 'play');
+      var id = nextId++;
+      bound.set(v, id);
+      var handler = function(){ syncOne(v, id); emit(); };
+      v.addEventListener('play', handler);
+      v.addEventListener('pause', handler);
+      v.addEventListener('ended', handler);
+      // No initial snapshot — timer stays paused until an explicit play event.
     };
     var scan = function(){
       var vids = document.getElementsByTagName('video');
@@ -57,6 +88,18 @@ const INJECTED_VIDEO_LISTENER = `(function(){
         childList: true, subtree: true
       });
     }
+    // Re-evaluate every 1s in case a video resizes (fullscreen toggle,
+    // mini-player) or starts playing without firing a 'play' event.
+    setInterval(function(){
+      var vids = document.getElementsByTagName('video');
+      for (var i = 0; i < vids.length; i++) {
+        var v = vids[i];
+        var id = bound.get(v);
+        if (id == null) continue;
+        syncOne(v, id);
+      }
+      emit();
+    }, 1000);
   } catch (e) {}
 })(); true;`;
 
@@ -78,10 +121,10 @@ export default function BrowserView() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
 
-  const running =
-    currentVideoId !== null
-      ? isEducational === true && videoPlaying
-      : isEducational !== false;
+  const isYouTubeHost = !!host && YOUTUBE_HOST_RE.test(host);
+  const running = isYouTubeHost
+    ? isEducational === true && videoPlaying
+    : isEducational !== false;
   const runningRef = useRef(running);
   useEffect(() => {
     runningRef.current = running;

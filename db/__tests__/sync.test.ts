@@ -134,8 +134,8 @@ describe('drain', () => {
     });
     const now = Date.now();
     await db!.insert(schema.syncOutbox).values([
-      { id: 'ob_first', tableName: 'sessions', rowId: 'first', operation: 'create', payloadJson: '{"n":1}', attempts: 0, nextAttemptAt: now, createdAt: now },
-      { id: 'ob_second', tableName: 'sessions', rowId: 'second', operation: 'create', payloadJson: '{"n":2}', attempts: 0, nextAttemptAt: now + 1, createdAt: now },
+      { id: 'ob_first', tableName: 'sessions', rowId: 'first', operation: 'create', payloadJson: '{"n":1}', attempts: 0, nextAttemptAt: now - 2, createdAt: now },
+      { id: 'ob_second', tableName: 'sessions', rowId: 'second', operation: 'create', payloadJson: '{"n":2}', attempts: 0, nextAttemptAt: now - 1, createdAt: now },
     ]);
     await drain();
     expect(received).toEqual([

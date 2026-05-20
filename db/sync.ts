@@ -2,6 +2,7 @@ import { and, asc, eq, lte } from "drizzle-orm";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 
 import { db, schema } from "@/db/client";
+import { logRejection } from "@/lib/logRejection";
 
 export type OutboxOp = "create" | "update" | "delete";
 export type OutboxHandler = (rowId: string, payload: unknown) => Promise<void>;
@@ -47,7 +48,7 @@ export async function enqueue(
     nextAttemptAt: now,
     createdAt: now,
   });
-  void drain();
+  void drain().catch((e) => logRejection("sync-drain:enqueue", e));
 }
 
 // Like enqueue(), but skips the insert if an outbox row already exists for
@@ -73,7 +74,7 @@ export async function enqueueOutboxIfNoPending(
     )
     .limit(1);
   if (existing.length > 0) {
-    void drain();
+    void drain().catch((e) => logRejection("sync-drain:dedup", e));
     return;
   }
   await enqueue(tableName, rowId, operation, payload);
@@ -150,7 +151,9 @@ async function subscribeNetInfo(): Promise<NetInfoUnsub | null> {
     const NetInfo = mod.default;
     const unsub = NetInfo.addEventListener((s) => {
       const connected = s.isConnected === true;
-      if (lastConnected === false && connected) void drain();
+      if (lastConnected === false && connected) {
+        void drain().catch((e) => logRejection("sync-drain:netinfo", e));
+      }
       lastConnected = connected;
     });
     return unsub;
@@ -165,14 +168,20 @@ export function start(): void {
   appStateSub = AppState.addEventListener(
     "change",
     (state: AppStateStatus) => {
-      if (state === "active") void drain();
+      if (state === "active") {
+        void drain().catch((e) => logRejection("sync-drain:foreground", e));
+      }
     },
   );
-  void subscribeNetInfo().then((unsub) => {
-    netInfoUnsub = unsub;
-  });
-  heartbeatId = setInterval(() => void drain(), HEARTBEAT_MS);
-  void drain();
+  void subscribeNetInfo()
+    .then((unsub) => {
+      netInfoUnsub = unsub;
+    })
+    .catch((e) => logRejection("sync-netinfo-subscribe", e));
+  heartbeatId = setInterval(() => {
+    void drain().catch((e) => logRejection("sync-drain:heartbeat", e));
+  }, HEARTBEAT_MS);
+  void drain().catch((e) => logRejection("sync-drain:boot", e));
 }
 
 export function stop(): void {

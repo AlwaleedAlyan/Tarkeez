@@ -18,7 +18,14 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const EDUCATION_CATEGORY = "27";
 // Categories that are clearly not study material. Howto&Style (26) is
 // intentionally NOT here — many tutorials live there and should fall to the LLM.
-const NEGATIVE_CATEGORIES = new Set(["20", "23", "24"]); // Gaming, Comedy, Entertainment
+const NEGATIVE_CATEGORIES = new Set(["10", "20", "23", "24"]); // Music, Gaming, Comedy, Entertainment
+
+// Strong educational signals in titles. If any match, instant pass — this
+// catches STEM tutorials that get mis-categorized as People & Blogs or
+// Howto & Style. Conservative wordlist: only terms whose presence is hard
+// to interpret as non-educational.
+const EDU_TITLE_RE =
+  /\b(algebra|calculus|geometry|trigonometry|physics|chemistry|biology|statistics|tutorial|lesson|lecture|crash course|how to solve|introduction to|fundamentals of|MIT|Stanford|Khan Academy|data structures|algorithm|theorem|derivative|integral)\b/i;
 
 type Verdict = { isEducational: boolean; reason: string };
 
@@ -49,6 +56,9 @@ async function classify(videoId: string): Promise<Verdict> {
   }
 
   const title = String(snippet.title ?? "");
+  if (EDU_TITLE_RE.test(title)) {
+    return { isEducational: true, reason: "title_keyword_education" };
+  }
   const description = String(snippet.description ?? "").slice(0, 1500);
   const prompt =
     `You are classifying a YouTube video for a study app. Reply with exactly one word: YES or NO.\n` +

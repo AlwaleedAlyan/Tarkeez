@@ -7,6 +7,7 @@ import { pullMaterials } from "@/db/repositories/materials";
 import { setMeta } from "@/db/repositories/meta";
 import { pullNotes } from "@/db/repositories/notes";
 import { pullSessions } from "@/db/repositories/sessions";
+import { logRejection } from "@/lib/logRejection";
 
 const HEARTBEAT_MS = 60_000;
 
@@ -61,7 +62,9 @@ async function subscribeNetInfo(): Promise<NetInfoUnsub | null> {
     return NetInfo.addEventListener((s) => {
       const connected = s.isConnected === true;
       if (lastConnected === false && connected && activeUserId) {
-        void pullAll(activeUserId);
+        void pullAll(activeUserId).catch((e) =>
+          logRejection("pull:netinfo", e),
+        );
       }
       lastConnected = connected;
     });
@@ -78,17 +81,25 @@ export function startPull(userId: string): void {
     "change",
     (state: AppStateStatus) => {
       if (state === "active" && activeUserId) {
-        void pullAll(activeUserId);
+        void pullAll(activeUserId).catch((e) =>
+          logRejection("pull:foreground", e),
+        );
       }
     },
   );
-  void subscribeNetInfo().then((unsub) => {
-    netInfoUnsub = unsub;
-  });
+  void subscribeNetInfo()
+    .then((unsub) => {
+      netInfoUnsub = unsub;
+    })
+    .catch((e) => logRejection("pull-netinfo-subscribe", e));
   heartbeatId = setInterval(() => {
-    if (activeUserId) void pullAll(activeUserId);
+    if (activeUserId) {
+      void pullAll(activeUserId).catch((e) =>
+        logRejection("pull:heartbeat", e),
+      );
+    }
   }, HEARTBEAT_MS);
-  void pullAll(userId);
+  void pullAll(userId).catch((e) => logRejection("pull:boot", e));
 }
 
 export function stopPull(): void {

@@ -5,11 +5,11 @@ import {
   Alert,
   FlatList,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -226,7 +226,7 @@ export default function CollectionDetailScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Pressable
+        <Tappable
           onPress={exitToLibrary}
           hitSlop={10}
           style={({ pressed }) => [
@@ -239,7 +239,7 @@ export default function CollectionDetailScreen() {
           accessibilityLabel="Back to library"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
         <Text
           numberOfLines={1}
@@ -248,7 +248,7 @@ export default function CollectionDetailScreen() {
           {collection.name}
         </Text>
 
-        <Pressable
+        <Tappable
           onPress={() => setRenameOpen(true)}
           hitSlop={10}
           style={({ pressed }) => [
@@ -261,9 +261,9 @@ export default function CollectionDetailScreen() {
           accessibilityLabel="Rename collection"
         >
           <Feather name="edit-2" size={16} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
-        <Pressable
+        <Tappable
           onPress={onDeleteCollection}
           hitSlop={10}
           style={({ pressed }) => [
@@ -276,7 +276,7 @@ export default function CollectionDetailScreen() {
           accessibilityLabel="Delete collection"
         >
           <Feather name="trash-2" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       </View>
 
       <FlatList

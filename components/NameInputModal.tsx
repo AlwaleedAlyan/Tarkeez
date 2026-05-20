@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import {
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -57,8 +57,8 @@ export function NameInputModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable
+      <Tappable style={styles.backdrop} onPress={onCancel}>
+        <Tappable
           onPress={() => {}}
           style={[
             styles.sheet,
@@ -101,8 +101,8 @@ export function NameInputModal({
               />
             </View>
           </KeyboardAwareScrollViewCompat>
-        </Pressable>
-      </Pressable>
+        </Tappable>
+      </Tappable>
     </Modal>
   );
 }

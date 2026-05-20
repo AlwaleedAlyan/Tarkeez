@@ -3,12 +3,12 @@ import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -223,7 +223,7 @@ export default function InsightsScreen() {
               Your focus
             </Text>
           </View>
-          <Pressable
+          <Tappable
             onPress={() => setShareOpen(true)}
             accessibilityLabel="Create a post"
             style={({ pressed }) => [
@@ -244,7 +244,7 @@ export default function InsightsScreen() {
             >
               Post
             </Text>
-          </Pressable>
+          </Tappable>
         </View>
 
         <View style={{ gap: 12 }}>
@@ -283,7 +283,7 @@ export default function InsightsScreen() {
             {(["pages", "words", "keystrokes"] as Metric[]).map((m) => {
               const active = metric === m;
               return (
-                <Pressable
+                <Tappable
                   key={m}
                   onPress={() => onPickMetric(m)}
                   style={({ pressed }) => [
@@ -310,7 +310,7 @@ export default function InsightsScreen() {
                   >
                     {METRIC_LABEL[m]}
                   </Text>
-                </Pressable>
+                </Tappable>
               );
             })}
           </View>

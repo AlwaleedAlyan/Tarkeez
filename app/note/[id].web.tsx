@@ -11,12 +11,12 @@ import {
   Alert,
   LayoutChangeEvent,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -355,7 +355,7 @@ export default function NoteScreenWeb() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Pressable
+        <Tappable
           onPress={onBack}
           hitSlop={10}
           style={({ pressed }) => [
@@ -368,7 +368,7 @@ export default function NoteScreenWeb() {
           accessibilityLabel="Back"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
         <View
           style={[
@@ -395,7 +395,7 @@ export default function NoteScreenWeb() {
           />
         </View>
 
-        <Pressable
+        <Tappable
           onPress={onDelete}
           hitSlop={10}
           style={({ pressed }) => [
@@ -408,7 +408,7 @@ export default function NoteScreenWeb() {
           accessibilityLabel="Delete note"
         >
           <Feather name="trash-2" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       </View>
 
       {mode === "text" ? (
@@ -529,7 +529,7 @@ function ModeSegment({
   colors: ReturnType<typeof useColors>;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         styles.modeSeg,
@@ -555,7 +555,7 @@ function ModeSegment({
       >
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -639,7 +639,7 @@ function TextToolbar({
           }
         };
         return (
-          <Pressable
+          <Tappable
             key={item.key}
             // Prevent focus theft so the contentEditable keeps its selection.
             // @ts-expect-error react-native-web forwards this to the DOM.
@@ -666,7 +666,7 @@ function TextToolbar({
                 {item.label}
               </Text>
             )}
-          </Pressable>
+          </Tappable>
         );
       })}
     </View>

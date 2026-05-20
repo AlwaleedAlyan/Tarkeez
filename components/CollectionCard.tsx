@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 
 import type { Collection } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
@@ -37,7 +38,7 @@ export function CollectionCard({
   };
 
   return (
-    <Pressable
+    <Tappable
       onPress={handle}
       onLongPress={onLongPress ? handleLong : undefined}
       delayLongPress={350}
@@ -62,7 +63,7 @@ export function CollectionCard({
       <Text style={[styles.count, { color: colors.mutedForeground }]}>
         {count} {count === 1 ? "material" : "materials"}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

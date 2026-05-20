@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -16,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Avatar } from "@/components/Avatar";
@@ -45,6 +45,7 @@ export default function SettingsScreen() {
     setMode,
     setAccent,
     setNotifications,
+    setSoundsEnabled,
     effectiveMode,
   } = useTheme();
 
@@ -157,7 +158,7 @@ export default function SettingsScreen() {
           { paddingTop: topPad, borderBottomColor: colors.border },
         ]}
       >
-        <Pressable
+        <Tappable
           onPress={() => router.back()}
           style={({ pressed }) => [
             styles.backBtn,
@@ -170,7 +171,7 @@ export default function SettingsScreen() {
           accessibilityLabel="Back"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
           Settings
         </Text>
@@ -193,14 +194,14 @@ export default function SettingsScreen() {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <Pressable onPress={onPickPhoto} disabled={busy}>
+            <Tappable onPress={onPickPhoto} disabled={busy}>
               <Avatar
                 uri={user?.photoUri}
                 transform={user?.photoTransform}
                 name={user?.name}
                 size={64}
               />
-            </Pressable>
+            </Tappable>
             <View style={{ flex: 1 }}>
               <Text
                 style={[styles.photoTitle, { color: colors.foreground }]}
@@ -273,8 +274,9 @@ export default function SettingsScreen() {
               {MODE_OPTIONS.map((opt) => {
                 const active = prefs.mode === opt.value;
                 return (
-                  <Pressable
+                  <Tappable
                     key={opt.value}
+                    sound="soft"
                     onPress={() => onModePick(opt.value)}
                     style={({ pressed }) => [
                       styles.segmentBtn,
@@ -302,7 +304,7 @@ export default function SettingsScreen() {
                     >
                       {opt.label}
                     </Text>
-                  </Pressable>
+                  </Tappable>
                 );
               })}
             </View>
@@ -326,8 +328,9 @@ export default function SettingsScreen() {
               {ACCENT_LIST.map((a) => {
                 const active = prefs.accent === a.name;
                 return (
-                  <Pressable
+                  <Tappable
                     key={a.name}
+                    sound="soft"
                     onPress={() => onAccentPick(a.name)}
                     style={({ pressed }) => [
                       styles.swatchCol,
@@ -372,7 +375,7 @@ export default function SettingsScreen() {
                     >
                       {a.label}
                     </Text>
-                  </Pressable>
+                  </Tappable>
                 );
               })}
             </View>
@@ -405,6 +408,40 @@ export default function SettingsScreen() {
               onValueChange={(v) => {
                 haptic();
                 setNotifications(v);
+              }}
+              trackColor={{ false: colors.muted, true: colors.primary }}
+              thumbColor="#ffffff"
+              ios_backgroundColor={colors.muted}
+            />
+          </View>
+          <View
+            style={[
+              styles.notifRow,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                marginTop: 12,
+              },
+            ]}
+          >
+            <View
+              style={[styles.rowIcon, { backgroundColor: colors.secondary }]}
+            >
+              <Feather name="volume-2" size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.foreground }]}>
+                Button sounds
+              </Text>
+              <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
+                A soft click when you tap.
+              </Text>
+            </View>
+            <Switch
+              value={prefs.soundsEnabled}
+              onValueChange={(v) => {
+                haptic();
+                setSoundsEnabled(v);
               }}
               trackColor={{ false: colors.muted, true: colors.primary }}
               thumbColor="#ffffff"
@@ -495,7 +532,7 @@ function Row({
   isLast?: boolean;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
@@ -521,7 +558,7 @@ function Row({
         </Text>
       </View>
       <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -539,7 +576,7 @@ function SmallBtn({
   danger?: boolean;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         styles.smallBtn,
@@ -565,7 +602,7 @@ function SmallBtn({
       >
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -641,7 +678,7 @@ function EditModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={modalStyles.backdrop}
       >
-        <Pressable style={modalStyles.scrim} onPress={onClose} />
+        <Tappable style={modalStyles.scrim} onPress={onClose} />
         <View
           style={[
             modalStyles.sheet,

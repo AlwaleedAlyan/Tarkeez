@@ -3,11 +3,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useLibrary } from "@/contexts/LibraryContext";
@@ -113,7 +113,7 @@ export default function StudyScreenWeb() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Pressable
+        <Tappable
           onPress={() => router.back()}
           hitSlop={10}
           style={({ pressed }) => [
@@ -126,7 +126,7 @@ export default function StudyScreenWeb() {
           accessibilityLabel="Back"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
         <Text
           numberOfLines={1}
           style={[styles.title, { color: colors.foreground }]}

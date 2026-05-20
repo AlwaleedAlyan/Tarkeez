@@ -13,13 +13,13 @@ import {
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import {
   RichEditor,
   RichToolbar,
@@ -439,7 +439,7 @@ export default function NoteScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Pressable
+        <Tappable
           onPress={onBack}
           hitSlop={10}
           style={({ pressed }) => [
@@ -452,7 +452,7 @@ export default function NoteScreen() {
           accessibilityLabel="Back"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
         <View
           style={[
@@ -476,7 +476,7 @@ export default function NoteScreen() {
           />
         </View>
 
-        <Pressable
+        <Tappable
           onPress={onExportPdf}
           hitSlop={10}
           disabled={exporting}
@@ -490,9 +490,9 @@ export default function NoteScreen() {
           accessibilityLabel="Export as PDF"
         >
           <Feather name="share" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
-        <Pressable
+        <Tappable
           onPress={onDelete}
           hitSlop={10}
           style={({ pressed }) => [
@@ -505,7 +505,7 @@ export default function NoteScreen() {
           accessibilityLabel="Delete note"
         >
           <Feather name="trash-2" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       </View>
 
       {mode === "text" ? (
@@ -695,7 +695,7 @@ function ModeSegment({
   colors: ReturnType<typeof useColors>;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         styles.modeSeg,
@@ -721,7 +721,7 @@ function ModeSegment({
       >
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

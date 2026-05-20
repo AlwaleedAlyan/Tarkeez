@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   WebView,
@@ -246,14 +247,14 @@ export default function BrowserView() {
           },
         ]}
       >
-        <Pressable
+        <Tappable
           onPress={() => router.back()}
           hitSlop={12}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.6 : 1 }]}
           accessibilityLabel="Back"
         >
           <Feather name="chevron-left" size={26} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
         <View style={{ flex: 1 }}>
           <Text
             numberOfLines={1}
@@ -292,7 +293,7 @@ export default function BrowserView() {
           },
         ]}
       >
-        <Pressable
+        <Tappable
           onPress={() => webviewRef.current?.goBack()}
           disabled={!canGoBack}
           hitSlop={8}
@@ -303,8 +304,8 @@ export default function BrowserView() {
           ]}
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Pressable>
-        <Pressable
+        </Tappable>
+        <Tappable
           onPress={() => webviewRef.current?.goForward()}
           disabled={!canGoForward}
           hitSlop={8}
@@ -315,8 +316,8 @@ export default function BrowserView() {
           ]}
         >
           <Feather name="chevron-right" size={22} color={colors.foreground} />
-        </Pressable>
-        <Pressable
+        </Tappable>
+        <Tappable
           onPress={() => webviewRef.current?.reload()}
           hitSlop={8}
           accessibilityLabel="Reload"
@@ -326,7 +327,7 @@ export default function BrowserView() {
           ]}
         >
           <Feather name="refresh-cw" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       </View>
     </View>
   );

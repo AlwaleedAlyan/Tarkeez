@@ -2,12 +2,12 @@ import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -87,8 +87,8 @@ export function CollectionPickerModal({ target, onClose }: Props) {
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
+      <Tappable style={styles.backdrop} onPress={onClose}>
+        <Tappable
           onPress={() => {}}
           style={[
             styles.sheet,
@@ -103,7 +103,7 @@ export function CollectionPickerModal({ target, onClose }: Props) {
             <Text style={[styles.title, { color: colors.foreground }]}>
               Add to collection
             </Text>
-            <Pressable
+            <Tappable
               onPress={onClose}
               hitSlop={10}
               style={({ pressed }) => [
@@ -116,7 +116,7 @@ export function CollectionPickerModal({ target, onClose }: Props) {
               accessibilityLabel="Close"
             >
               <Feather name="x" size={18} color={colors.foreground} />
-            </Pressable>
+            </Tappable>
           </View>
 
           {collections.length === 0 ? (
@@ -135,7 +135,7 @@ export function CollectionPickerModal({ target, onClose }: Props) {
               {collections.map((c) => {
                 const checked = inSet.has(c.id);
                 return (
-                  <Pressable
+                  <Tappable
                     key={c.id}
                     onPress={() => onToggle(c.id)}
                     style={({ pressed }) => [
@@ -180,7 +180,7 @@ export function CollectionPickerModal({ target, onClose }: Props) {
                         />
                       ) : null}
                     </View>
-                  </Pressable>
+                  </Tappable>
                 );
               })}
             </ScrollView>
@@ -193,8 +193,8 @@ export function CollectionPickerModal({ target, onClose }: Props) {
               onPress={() => setCreating(true)}
             />
           </View>
-        </Pressable>
-      </Pressable>
+        </Tappable>
+      </Tappable>
 
       <NameInputModal
         visible={creating}

@@ -3,13 +3,13 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
@@ -119,9 +119,9 @@ export default function BrowserScreen() {
             style={[styles.searchInput, { color: colors.foreground }]}
           />
           {query ? (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+            <Tappable onPress={() => setQuery("")} hitSlop={8}>
               <Feather name="x" size={18} color={colors.mutedForeground} />
-            </Pressable>
+            </Tappable>
           ) : null}
         </View>
 
@@ -131,7 +131,7 @@ export default function BrowserScreen() {
           </Text>
           <View style={styles.grid}>
             {BOOKMARKS.map((b) => (
-              <Pressable
+              <Tappable
                 key={b.url}
                 onPress={() => openUrl(b.url, b.title)}
                 style={({ pressed }) => [
@@ -159,7 +159,7 @@ export default function BrowserScreen() {
                 >
                   {b.domain}
                 </Text>
-              </Pressable>
+              </Tappable>
             ))}
           </View>
         </View>
@@ -170,7 +170,7 @@ export default function BrowserScreen() {
           </Text>
           <View style={{ gap: 12 }}>
             {RECENTS.map((r) => (
-              <Pressable
+              <Tappable
                 key={r.url}
                 onPress={() => openUrl(`https://${r.url}`, r.title)}
                 style={({ pressed }) => [
@@ -240,7 +240,7 @@ export default function BrowserScreen() {
                     />
                   </View>
                 </View>
-              </Pressable>
+              </Tappable>
             ))}
           </View>
         </View>

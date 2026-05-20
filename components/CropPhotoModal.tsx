@@ -3,11 +3,11 @@ import {
   Image,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -165,7 +165,7 @@ export function CropPhotoModal({ uri, onCancel, onSave }: Props) {
           </View>
 
           <View style={styles.zoomRow}>
-            <Pressable
+            <Tappable
               onPress={() => incScale(-0.25)}
               style={({ pressed }) => [
                 styles.zoomBtn,
@@ -174,8 +174,8 @@ export function CropPhotoModal({ uri, onCancel, onSave }: Props) {
               accessibilityLabel="Zoom out"
             >
               <Text style={styles.zoomGlyph}>−</Text>
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               onPress={reset}
               style={({ pressed }) => [
                 styles.resetBtn,
@@ -183,8 +183,8 @@ export function CropPhotoModal({ uri, onCancel, onSave }: Props) {
               ]}
             >
               <Text style={styles.resetText}>Reset</Text>
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               onPress={() => incScale(0.25)}
               style={({ pressed }) => [
                 styles.zoomBtn,
@@ -193,7 +193,7 @@ export function CropPhotoModal({ uri, onCancel, onSave }: Props) {
               accessibilityLabel="Zoom in"
             >
               <Text style={styles.zoomGlyph}>+</Text>
-            </Pressable>
+            </Tappable>
           </View>
 
           <View style={styles.actions}>

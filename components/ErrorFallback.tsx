@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import {
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
@@ -51,7 +51,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {__DEV__ ? (
-        <Pressable
+        <Tappable
           onPress={() => setIsModalVisible(true)}
           accessibilityLabel="View error details"
           accessibilityRole="button"
@@ -65,7 +65,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           ]}
         >
           <Feather name="alert-circle" size={20} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       ) : null}
 
       <View style={styles.content}>
@@ -77,7 +77,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           Please reload the app to continue.
         </Text>
 
-        <Pressable
+        <Tappable
           onPress={handleRestart}
           style={({ pressed }) => [
             styles.button,
@@ -96,7 +96,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           >
             Try Again
           </Text>
-        </Pressable>
+        </Tappable>
       </View>
 
       {__DEV__ ? (
@@ -122,7 +122,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
                   Error Details
                 </Text>
-                <Pressable
+                <Tappable
                   onPress={() => setIsModalVisible(false)}
                   accessibilityLabel="Close error details"
                   accessibilityRole="button"
@@ -132,7 +132,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                   ]}
                 >
                   <Feather name="x" size={24} color={colors.foreground} />
-                </Pressable>
+                </Tappable>
               </View>
 
               <ScrollView

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { playTap } from "@/lib/tapSound";
 
 type Variant = "primary" | "secondary" | "ghost" | "destructive";
 
@@ -50,6 +51,7 @@ export function Button({
   }[variant];
 
   const handlePress = () => {
+    playTap("deep");
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }

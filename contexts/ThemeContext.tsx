@@ -17,17 +17,20 @@ import {
   type ThemeMode,
   buildPalette,
 } from "@/constants/themes";
+import { setTapSoundEnabled } from "@/lib/tapSound";
 
 type AppPrefs = {
   mode: ThemeMode;
   accent: AccentName;
   notifications: boolean;
+  soundsEnabled: boolean;
 };
 
 const DEFAULT_PREFS: AppPrefs = {
   mode: "system",
   accent: "latte",
   notifications: true,
+  soundsEnabled: true,
 };
 
 const PREFS_KEY = "@Tarkeez/prefs";
@@ -38,6 +41,7 @@ type ThemeContextType = {
   setMode: (mode: ThemeMode) => void;
   setAccent: (accent: AccentName) => void;
   setNotifications: (enabled: boolean) => void;
+  setSoundsEnabled: (enabled: boolean) => void;
   effectiveMode: "light" | "dark";
   palette: Palette;
   radius: number;
@@ -66,6 +70,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               typeof parsed.notifications === "boolean"
                 ? parsed.notifications
                 : DEFAULT_PREFS.notifications,
+            soundsEnabled:
+              typeof parsed.soundsEnabled === "boolean"
+                ? parsed.soundsEnabled
+                : DEFAULT_PREFS.soundsEnabled,
           });
         }
       } finally {
@@ -91,6 +99,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     (enabled: boolean) => persist({ ...prefs, notifications: enabled }),
     [prefs, persist],
   );
+  const setSoundsEnabled = useCallback(
+    (enabled: boolean) => persist({ ...prefs, soundsEnabled: enabled }),
+    [prefs, persist],
+  );
+
+  useEffect(() => {
+    setTapSoundEnabled(prefs.soundsEnabled);
+  }, [prefs.soundsEnabled]);
 
   const effectiveMode: "light" | "dark" =
     prefs.mode === "system"
@@ -111,6 +127,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setMode,
       setAccent,
       setNotifications,
+      setSoundsEnabled,
       effectiveMode,
       palette,
       radius: RADIUS,
@@ -121,6 +138,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setMode,
       setAccent,
       setNotifications,
+      setSoundsEnabled,
       effectiveMode,
       palette,
     ],

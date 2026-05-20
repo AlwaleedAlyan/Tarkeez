@@ -8,11 +8,11 @@ import {
   FlatList,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -288,7 +288,7 @@ export default function LibraryScreen() {
                   Your library
                 </Text>
               </View>
-              <Pressable
+              <Tappable
                 onPress={openAddMenu}
                 disabled={importing}
                 style={({ pressed }) => [
@@ -305,7 +305,7 @@ export default function LibraryScreen() {
                   size={22}
                   color={colors.primaryForeground}
                 />
-              </Pressable>
+              </Tappable>
             </View>
 
             {collections.length > 0 ? (
@@ -416,11 +416,11 @@ export default function LibraryScreen() {
           statusBarTranslucent
           onRequestClose={() => setItemMenuTarget(null)}
         >
-          <Pressable
+          <Tappable
             style={addMenuStyles.backdrop}
             onPress={() => setItemMenuTarget(null)}
           >
-            <Pressable
+            <Tappable
               onPress={() => {}}
               style={[
                 addMenuStyles.sheet,
@@ -463,7 +463,7 @@ export default function LibraryScreen() {
                 foreground={colors.foreground}
                 border={colors.border}
               />
-              <Pressable
+              <Tappable
                 onPress={() => setItemMenuTarget(null)}
                 style={({ pressed }) => [
                   addMenuStyles.cancelRow,
@@ -478,9 +478,9 @@ export default function LibraryScreen() {
                 >
                   Cancel
                 </Text>
-              </Pressable>
-            </Pressable>
-          </Pressable>
+              </Tappable>
+            </Tappable>
+          </Tappable>
         </Modal>
       ) : null}
 
@@ -491,11 +491,11 @@ export default function LibraryScreen() {
         statusBarTranslucent
         onRequestClose={() => setAddMenuOpen(false)}
       >
-        <Pressable
+        <Tappable
           style={addMenuStyles.backdrop}
           onPress={() => setAddMenuOpen(false)}
         >
-          <Pressable
+          <Tappable
             onPress={() => {}}
             style={[
               addMenuStyles.sheet,
@@ -532,7 +532,7 @@ export default function LibraryScreen() {
               foreground={colors.foreground}
               border={colors.border}
             />
-            <Pressable
+            <Tappable
               onPress={() => setAddMenuOpen(false)}
               style={({ pressed }) => [
                 addMenuStyles.cancelRow,
@@ -547,9 +547,9 @@ export default function LibraryScreen() {
               >
                 Cancel
               </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+            </Tappable>
+          </Tappable>
+        </Tappable>
       </Modal>
     </View>
   );
@@ -571,7 +571,7 @@ function MenuRow({
   border: string;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         addMenuStyles.row,
@@ -582,7 +582,7 @@ function MenuRow({
       <Text style={[addMenuStyles.rowLabel, { color: foreground }]}>
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

@@ -10,11 +10,11 @@ import {
   Image,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -139,7 +139,7 @@ export function SharePostModal({
         ]}
       >
         <View style={styles.headerRow}>
-          <Pressable
+          <Tappable
             onPress={onClose}
             hitSlop={12}
             style={({ pressed }) => [
@@ -149,7 +149,7 @@ export function SharePostModal({
             accessibilityLabel="Close"
           >
             <Feather name="x" size={22} color="#ffffff" />
-          </Pressable>
+          </Tappable>
           <View style={{ width: 38 }} />
           <View style={{ width: 38 }} />
         </View>

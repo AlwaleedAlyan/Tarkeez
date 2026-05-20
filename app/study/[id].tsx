@@ -13,11 +13,11 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
@@ -432,7 +432,7 @@ export default function StudyScreen() {
   return (
     <View style={[styles.root, { backgroundColor: "#1a1a2e" }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Pressable
+        <Tappable
           onPress={saveAndExit}
           style={({ pressed }) => [
             styles.iconBtn,
@@ -443,7 +443,7 @@ export default function StudyScreen() {
           ]}
         >
           <Feather name="x" size={20} color="#faf7f2" />
-        </Pressable>
+        </Tappable>
 
         <View style={styles.headerCenter}>
           <Text numberOfLines={1} style={styles.headerTitle}>
@@ -459,7 +459,7 @@ export default function StudyScreen() {
           </View>
         </View>
 
-        <Pressable
+        <Tappable
           onPress={onDelete}
           style={({ pressed }) => [
             styles.iconBtn,
@@ -470,7 +470,7 @@ export default function StudyScreen() {
           ]}
         >
           <Feather name="trash-2" size={18} color="#faf7f2" />
-        </Pressable>
+        </Tappable>
       </View>
 
       <View style={styles.viewerWrap}>
@@ -550,7 +550,7 @@ export default function StudyScreen() {
               activeColor="#f5c451"
             />
             <View style={styles.toolDivider} />
-            <Pressable
+            <Tappable
               onPress={onClearPage}
               style={({ pressed }) => [
                 styles.toolBtn,
@@ -558,7 +558,7 @@ export default function StudyScreen() {
               ]}
             >
               <Feather name="trash" size={16} color="#faf7f2" />
-            </Pressable>
+            </Tappable>
           </View>
           {tool === "draw" ? (
             <Text style={styles.toolHint}>One finger draws · pinch zoom in Read mode</Text>
@@ -605,7 +605,7 @@ function ToolButton({
   activeColor?: string;
 }) {
   return (
-    <Pressable
+    <Tappable
       onPress={onPress}
       style={({ pressed }) => [
         styles.toolBtn,
@@ -630,7 +630,7 @@ function ToolButton({
       >
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

@@ -4,12 +4,12 @@ import React, { useMemo } from "react";
 import {
   Alert,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Avatar } from "@/components/Avatar";
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
         ]}
       >
         <View style={{ flex: 1 }} />
-        <Pressable
+        <Tappable
           onPress={() => router.push("/settings")}
           style={({ pressed }) => [
             styles.gearBtn,
@@ -81,7 +81,7 @@ export default function ProfileScreen() {
           accessibilityLabel="Settings"
         >
           <Feather name="settings" size={20} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
       </View>
 
       <ScrollView

@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 
 import type { Note } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
@@ -48,7 +49,7 @@ export function NoteCard({ note, onPress, onMenuPress }: Props) {
   };
 
   return (
-    <Pressable
+    <Tappable
       onPress={handle}
       style={({ pressed }) => [
         styles.card,
@@ -90,7 +91,7 @@ export function NoteCard({ note, onPress, onMenuPress }: Props) {
       </View>
 
       {onMenuPress ? (
-        <Pressable
+        <Tappable
           onPress={(e) => {
             e.stopPropagation();
             onMenuPress();
@@ -107,11 +108,11 @@ export function NoteCard({ note, onPress, onMenuPress }: Props) {
             size={20}
             color={colors.mutedForeground}
           />
-        </Pressable>
+        </Tappable>
       ) : null}
 
       <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
-    </Pressable>
+    </Tappable>
   );
 }
 

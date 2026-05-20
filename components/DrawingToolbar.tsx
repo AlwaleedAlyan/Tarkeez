@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 
 import { useColors } from "@/hooks/useColors";
 import type { DrawingTool } from "@/components/DrawingCanvas";
@@ -102,7 +103,7 @@ export function DrawingToolbar({
         >
           <View style={styles.swatchRow}>
             {PEN_COLORS.map((c) => (
-              <Pressable
+              <Tappable
                 key={c}
                 onPress={() => {
                   onColorChange(c);
@@ -136,7 +137,7 @@ export function DrawingToolbar({
         >
           <View style={styles.sizeRow}>
             {sizesForTool(tool).map((s) => (
-              <Pressable
+              <Tappable
                 key={s}
                 onPress={() => {
                   onWidthChange(s);
@@ -161,7 +162,7 @@ export function DrawingToolbar({
                     opacity: tool === "highlighter" ? 0.45 : 1,
                   }}
                 />
-              </Pressable>
+              </Tappable>
             ))}
           </View>
         </Popover>
@@ -170,7 +171,7 @@ export function DrawingToolbar({
       <View style={styles.row}>
         <View style={styles.group}>
           {TOOL_BTNS.map((b) => (
-            <Pressable
+            <Tappable
               key={b.tool}
               onPress={() => {
                 onToolChange(b.tool);
@@ -187,11 +188,11 @@ export function DrawingToolbar({
               accessibilityLabel={`Tool ${b.tool}`}
             >
               {b.icon}
-            </Pressable>
+            </Tappable>
           ))}
         </View>
 
-        <Pressable
+        <Tappable
           onPress={() => {
             if (pickersDisabled) return;
             setPopover((p) => (p === "color" ? null : "color"));
@@ -212,9 +213,9 @@ export function DrawingToolbar({
               },
             ]}
           />
-        </Pressable>
+        </Tappable>
 
-        <Pressable
+        <Tappable
           onPress={() => {
             if (pickersDisabled) return;
             setPopover((p) => (p === "size" ? null : "size"));
@@ -236,11 +237,11 @@ export function DrawingToolbar({
               opacity: tool === "highlighter" ? 0.45 : 1,
             }}
           />
-        </Pressable>
+        </Tappable>
 
         <View style={styles.spacer} />
 
-        <Pressable
+        <Tappable
           onPress={onUndo}
           disabled={!canUndo}
           style={({ pressed }) => [
@@ -250,9 +251,9 @@ export function DrawingToolbar({
           accessibilityLabel="Undo"
         >
           <Feather name="rotate-ccw" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
-        <Pressable
+        <Tappable
           onPress={onRedo}
           disabled={!canRedo}
           style={({ pressed }) => [
@@ -262,7 +263,7 @@ export function DrawingToolbar({
           accessibilityLabel="Redo"
         >
           <Feather name="rotate-cw" size={18} color={colors.foreground} />
-        </Pressable>
+        </Tappable>
 
       </View>
     </View>
@@ -290,7 +291,7 @@ function Popover({
 }) {
   return (
     <>
-      <Pressable
+      <Tappable
         style={StyleSheet.absoluteFillObject}
         onPress={onClose}
         accessibilityLabel="Dismiss popover"

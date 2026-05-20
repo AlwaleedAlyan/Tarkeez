@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type {
@@ -68,7 +69,7 @@ export function InAppBrowser({ url, title }: Props) {
         ]}
       >
         <View style={styles.navCluster}>
-          <Pressable
+          <Tappable
             onPress={() => ref.current?.goBack()}
             disabled={!canGoBack}
             hitSlop={8}
@@ -79,8 +80,8 @@ export function InAppBrowser({ url, title }: Props) {
             ]}
           >
             <Feather name="chevron-left" size={22} color={colors.foreground} />
-          </Pressable>
-          <Pressable
+          </Tappable>
+          <Tappable
             onPress={() => ref.current?.goForward()}
             disabled={!canGoForward}
             hitSlop={8}
@@ -91,8 +92,8 @@ export function InAppBrowser({ url, title }: Props) {
             ]}
           >
             <Feather name="chevron-right" size={22} color={colors.foreground} />
-          </Pressable>
-          <Pressable
+          </Tappable>
+          <Tappable
             onPress={() => ref.current?.reload()}
             hitSlop={8}
             accessibilityLabel="Reload"
@@ -102,7 +103,7 @@ export function InAppBrowser({ url, title }: Props) {
             ]}
           >
             <Feather name="refresh-cw" size={18} color={colors.foreground} />
-          </Pressable>
+          </Tappable>
         </View>
 
         <View style={styles.titleBox}>
@@ -120,7 +121,7 @@ export function InAppBrowser({ url, title }: Props) {
           </Text>
         </View>
 
-        <Pressable
+        <Tappable
           onPress={() => router.back()}
           hitSlop={8}
           accessibilityLabel="Done"
@@ -130,7 +131,7 @@ export function InAppBrowser({ url, title }: Props) {
           ]}
         >
           <Text style={[styles.doneLabel, { color: colors.accent }]}>Done</Text>
-        </Pressable>
+        </Tappable>
       </View>
 
       {loading ? (
@@ -201,7 +202,7 @@ export function InAppBrowser({ url, title }: Props) {
               >
                 {errorMessage}
               </Text>
-              <Pressable
+              <Tappable
                 onPress={() => {
                   setErrorMessage(null);
                   ref.current?.reload();
@@ -212,7 +213,7 @@ export function InAppBrowser({ url, title }: Props) {
                 <Text style={[styles.retryLabel, { color: colors.accent }]}>
                   Retry
                 </Text>
-              </Pressable>
+              </Tappable>
             </View>
           </View>
         ) : null}

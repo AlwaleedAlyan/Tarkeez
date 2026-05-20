@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
@@ -44,7 +45,7 @@ export function InAppBrowserWeb({ url, title }: Props) {
             {host}
           </Text>
         </View>
-        <Pressable
+        <Tappable
           onPress={() => router.back()}
           hitSlop={8}
           accessibilityLabel="Done"
@@ -54,7 +55,7 @@ export function InAppBrowserWeb({ url, title }: Props) {
           ]}
         >
           <Text style={[styles.doneLabel, { color: colors.accent }]}>Done</Text>
-        </Pressable>
+        </Tappable>
       </View>
 
       {loading ? (

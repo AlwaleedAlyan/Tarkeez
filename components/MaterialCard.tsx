@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { Tappable } from "@/components/Tappable";
 
 import type { Material, Session } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
@@ -45,7 +46,7 @@ export function MaterialCard({
   };
 
   return (
-    <Pressable
+    <Tappable
       onPress={handle}
       style={({ pressed }) => [
         styles.card,
@@ -101,7 +102,7 @@ export function MaterialCard({
       </View>
 
       {onMenuPress ? (
-        <Pressable
+        <Tappable
           onPress={(e) => {
             e.stopPropagation();
             onMenuPress();
@@ -118,11 +119,11 @@ export function MaterialCard({
             size={20}
             color={colors.mutedForeground}
           />
-        </Pressable>
+        </Tappable>
       ) : null}
 
       <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
-    </Pressable>
+    </Tappable>
   );
 }
 

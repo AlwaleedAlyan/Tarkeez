@@ -120,11 +120,19 @@ export type Session = {
   pendingSync?: boolean;
 };
 
+export type PenType =
+  | "ballpoint"
+  | "pencil"
+  | "marker"
+  | "brush"
+  | "fountain";
+
 export type Stroke = {
   color: string;
   width: number;
   points: { x: number; y: number }[];
   kind?: "pen" | "highlighter";
+  penType?: PenType;
 };
 
 export type Highlight = {
@@ -956,7 +964,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           pendingSync: true,
         });
       } catch (err) {
-        console.warn("[db] insertPendingSession failed", err);
+        // A failed insert means the session is lost — surface it loudly so a
+        // schema mismatch (e.g. missing external_url) can't fail silently.
+        console.error("[db] insertPendingSession failed", err);
       }
       // Enqueue outbox row — push worker POSTs and flips status to synced.
       try {
@@ -967,7 +977,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           sessionToApi(session),
         );
       } catch (err) {
-        console.warn("[db] enqueue session failed", err);
+        console.error("[db] enqueue session failed", err);
       }
     },
     [sessions, persistSessions, user],

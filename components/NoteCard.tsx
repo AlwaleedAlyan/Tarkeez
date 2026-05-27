@@ -1,11 +1,22 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
-import { Tappable } from "@/components/Tappable";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 
 import type { Note } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type Props = {
   note: Note;
@@ -41,6 +52,8 @@ export function NoteCard({ note, onPress, onMenuPress }: Props) {
     note.contentHtml,
   ]);
 
+  const press = useSharedValue(0);
+
   const handle = () => {
     if (Platform.OS !== "web") {
       Haptics.selectionAsync().catch(() => {});
@@ -48,71 +61,100 @@ export function NoteCard({ note, onPress, onMenuPress }: Props) {
     onPress();
   };
 
+  const cardAnim = useAnimatedStyle(() => {
+    const scale = withSpring(1 - press.value * 0.03, {
+      damping: 14,
+      stiffness: 240,
+    });
+    return {
+      transform: [{ scale }],
+      borderColor: interpolateColor(
+        press.value,
+        [0, 1],
+        [colors.border, colors.primary],
+      ),
+      shadowOpacity: withTiming(0.06 + press.value * 0.12, { duration: 160 }),
+      elevation: withTiming(2 + press.value * 6, { duration: 160 }),
+    };
+  });
+
   return (
-    <Tappable
-      onPress={handle}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          transform: [{ scale: pressed ? 0.99 : 1 }],
-        },
-      ]}
+    <Animated.View
+      entering={FadeInDown.springify().damping(18).stiffness(160)}
+      exiting={FadeOutUp.duration(180)}
+      layout={LinearTransition.springify().damping(20).stiffness(180)}
     >
-      <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}>
-        <Feather name="edit-3" size={22} color={colors.primary} />
-      </View>
-
-      <View style={styles.content}>
-        <Text
-          numberOfLines={2}
-          style={[styles.title, { color: colors.foreground }]}
-        >
-          {note.title || "Untitled"}
-        </Text>
-
-        <View style={styles.meta}>
-          <View style={styles.metaItem}>
-            <Feather name="clock" size={12} color={colors.mutedForeground} />
-            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-              {fmtRelative(note.updatedAt)}
-            </Text>
-          </View>
-          {preview ? (
-            <Text
-              numberOfLines={1}
-              style={[styles.preview, { color: colors.mutedForeground }]}
-            >
-              {preview}
-            </Text>
-          ) : null}
+      <AnimatedPressable
+        onPress={handle}
+        onPressIn={() => {
+          press.value = withTiming(1, { duration: 120 });
+        }}
+        onPressOut={() => {
+          press.value = withTiming(0, { duration: 200 });
+        }}
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            shadowColor: "#000",
+          },
+          cardAnim,
+        ]}
+      >
+        <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}>
+          <Feather name="edit-3" size={22} color={colors.primary} />
         </View>
-      </View>
 
-      {onMenuPress ? (
-        <Tappable
-          onPress={(e) => {
-            e.stopPropagation();
-            onMenuPress();
-          }}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.menuBtn,
-            { opacity: pressed ? 0.5 : 1 },
-          ]}
-          accessibilityLabel="Note options"
-        >
-          <Feather
-            name="more-vertical"
-            size={20}
-            color={colors.mutedForeground}
-          />
-        </Tappable>
-      ) : null}
+        <View style={styles.content}>
+          <Text
+            numberOfLines={2}
+            style={[styles.title, { color: colors.foreground }]}
+          >
+            {note.title || "Untitled"}
+          </Text>
 
-      <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
-    </Tappable>
+          <View style={styles.meta}>
+            <View style={styles.metaItem}>
+              <Feather name="clock" size={12} color={colors.mutedForeground} />
+              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                {fmtRelative(note.updatedAt)}
+              </Text>
+            </View>
+            {preview ? (
+              <Text
+                numberOfLines={1}
+                style={[styles.preview, { color: colors.mutedForeground }]}
+              >
+                {preview}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        {onMenuPress ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onMenuPress();
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.menuBtn,
+              { opacity: pressed ? 0.5 : 1 },
+            ]}
+            accessibilityLabel="Note options"
+          >
+            <Feather
+              name="more-vertical"
+              size={20}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
+
+        <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+      </AnimatedPressable>
+    </Animated.View>
   );
 }
 
@@ -124,6 +166,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
   },
   iconBox: {
     width: 48,

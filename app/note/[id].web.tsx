@@ -30,7 +30,11 @@ import {
   PEN_COLORS,
   sizesForTool,
 } from "@/components/DrawingToolbar";
-import { useLibrary, type Stroke } from "@/contexts/LibraryContext";
+import {
+  useLibrary,
+  type PenType,
+  type Stroke,
+} from "@/contexts/LibraryContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -84,6 +88,7 @@ export default function NoteScreenWeb() {
   const [tool, setTool] = useState<DrawingTool>("pen");
   const [color, setColor] = useState<string>(PEN_COLORS[0]);
   const [width, setWidth] = useState<number>(4);
+  const [penType, setPenType] = useState<PenType>("ballpoint");
 
   const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -475,6 +480,7 @@ export default function NoteScreenWeb() {
             tool={tool}
             color={color}
             width={width}
+            penType={penType}
             background={drawBackground}
             viewportWidth={bodySize.w}
             viewportHeight={bodySize.h}
@@ -495,9 +501,11 @@ export default function NoteScreenWeb() {
             tool={tool}
             color={color}
             width={width}
+            penType={penType}
             onToolChange={onSwitchTool}
             onColorChange={setColor}
             onWidthChange={setWidth}
+            onPenTypeChange={setPenType}
             onUndo={() => {
               canvasRef.current?.undo();
               bumpHistory();

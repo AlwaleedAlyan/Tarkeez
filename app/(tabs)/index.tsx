@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, { LinearTransition } from "react-native-reanimated";
 import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -262,12 +263,15 @@ export default function LibraryScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <FlatList
+      <Animated.FlatList
         data={items}
         keyExtractor={(item) =>
           item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
         }
         scrollEnabled={!showEmptyState}
+        itemLayoutAnimation={LinearTransition.springify()
+          .damping(22)
+          .stiffness(180)}
         contentContainerStyle={{
           paddingTop: topPad + 16,
           paddingBottom: bottomPad,

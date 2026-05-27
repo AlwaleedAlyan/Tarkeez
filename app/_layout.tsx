@@ -21,6 +21,8 @@ import "@/db/handlers/sessions";
 import "@/db/handlers/collections";
 import "@/db/handlers/notes";
 import "@/db/handlers/materials";
+import { logSessionsDiagnostic } from "@/db/diagnostics";
+import { ensureSessionsSchema } from "@/db/ensureSessionsSchema";
 import { useDbMigrations } from "@/db/migrate";
 import { start as startSync, stop as stopSync } from "@/db/sync";
 import { logRejection } from "@/lib/logRejection";
@@ -102,6 +104,7 @@ export default function RootLayout() {
     Inter_700Bold,
   });
   const [migrationDone, setMigrationDone] = useState(false);
+  const [schemaReady, setSchemaReady] = useState(false);
   const { success: dbReady, error: dbError } = useDbMigrations();
 
   useEffect(() => {
@@ -116,6 +119,16 @@ export default function RootLayout() {
 
   const dbBootDone = dbReady || dbError != null;
 
+  // Repair a stale/failed study_sessions migration before any provider (and
+  // its live queries) mount. No-op when the schema is already current.
+  useEffect(() => {
+    if (!dbBootDone) return;
+    if (dbError) console.error("[diag] db migration error at boot:", dbError);
+    ensureSessionsSchema();
+    logSessionsDiagnostic();
+    setSchemaReady(true);
+  }, [dbBootDone]);
+
   useEffect(() => {
     if (!dbReady) return;
     startSync();
@@ -123,12 +136,17 @@ export default function RootLayout() {
   }, [dbReady]);
 
   useEffect(() => {
-    if ((fontsLoaded || fontError) && migrationDone && dbBootDone) {
+    if ((fontsLoaded || fontError) && migrationDone && dbBootDone && schemaReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, migrationDone, dbBootDone]);
+  }, [fontsLoaded, fontError, migrationDone, dbBootDone, schemaReady]);
 
-  if ((!fontsLoaded && !fontError) || !migrationDone || !dbBootDone) {
+  if (
+    (!fontsLoaded && !fontError) ||
+    !migrationDone ||
+    !dbBootDone ||
+    !schemaReady
+  ) {
     return null;
   }
 

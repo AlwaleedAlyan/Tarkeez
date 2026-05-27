@@ -13,18 +13,21 @@ import {
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { Tappable } from "@/components/Tappable";
-import {
-  RichEditor,
-  RichToolbar,
-  actions,
-} from "react-native-pell-rich-editor";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { RichEditor } from "react-native-pell-rich-editor";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/Button";
@@ -38,10 +41,17 @@ import {
   PEN_COLORS,
   sizesForTool,
 } from "@/components/DrawingToolbar";
-import { useLibrary, type Stroke } from "@/contexts/LibraryContext";
+import { RichTextToolbarV2 } from "@/components/RichTextToolbarV2";
+import {
+  useLibrary,
+  type PenType,
+  type Stroke,
+} from "@/contexts/LibraryContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { exportNoteToPdf } from "@/lib/exportNotePdf";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const AUTOSAVE_DELAY_MS = 600;
 const INACTIVITY_DRAW_MS = 30_000;
@@ -95,6 +105,7 @@ export default function NoteScreen() {
   const [tool, setTool] = useState<DrawingTool>("pen");
   const [color, setColor] = useState<string>(PEN_COLORS[0]);
   const [width, setWidth] = useState<number>(4);
+  const [penType, setPenType] = useState<PenType>("ballpoint");
 
   const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -439,77 +450,44 @@ export default function NoteScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Tappable
-          onPress={onBack}
-          hitSlop={10}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            {
-              backgroundColor: colors.secondary,
-              opacity: pressed ? 0.6 : 1,
-            },
-          ]}
+        <HeaderIconButton
+          icon="chevron-left"
           accessibilityLabel="Back"
-        >
-          <Feather name="chevron-left" size={22} color={colors.foreground} />
-        </Tappable>
+          surface={colors.secondary}
+          tint={colors.foreground}
+          onPress={onBack}
+        />
 
-        <View
-          style={[
-            styles.modeSwitch,
-            { backgroundColor: colors.secondary, borderColor: colors.border },
-          ]}
-        >
-          <ModeSegment
-            label="Text"
-            icon="type"
-            active={mode === "text"}
-            onPress={() => switchMode("text")}
-            colors={colors}
-          />
-          <ModeSegment
-            label="Draw"
-            icon="edit-3"
-            active={mode === "draw"}
-            onPress={() => switchMode("draw")}
-            colors={colors}
-          />
-        </View>
+        <ModeSwitch
+          mode={mode}
+          onChange={switchMode}
+          surface={colors.secondary}
+          border={colors.border}
+          active={colors.primary}
+          activeText={colors.primaryForeground}
+          idleText={colors.foreground}
+        />
 
-        <Tappable
-          onPress={onExportPdf}
-          hitSlop={10}
-          disabled={exporting}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            {
-              backgroundColor: colors.secondary,
-              opacity: exporting ? 0.4 : pressed ? 0.6 : 1,
-            },
-          ]}
+        <HeaderIconButton
+          icon="share"
           accessibilityLabel="Export as PDF"
-        >
-          <Feather name="share" size={18} color={colors.foreground} />
-        </Tappable>
+          surface={colors.secondary}
+          tint={colors.foreground}
+          onPress={onExportPdf}
+          disabled={exporting}
+        />
 
-        <Tappable
-          onPress={onDelete}
-          hitSlop={10}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            {
-              backgroundColor: colors.secondary,
-              opacity: pressed ? 0.6 : 1,
-            },
-          ]}
+        <HeaderIconButton
+          icon="trash-2"
           accessibilityLabel="Delete note"
-        >
-          <Feather name="trash-2" size={18} color={colors.foreground} />
-        </Tappable>
+          surface={colors.secondary}
+          tint={colors.foreground}
+          onPress={onDelete}
+        />
       </View>
 
       {mode === "text" ? (
-        <View style={[styles.titleRow, { paddingHorizontal: 16 }]}>
+        <View style={[styles.titleRow, { paddingHorizontal: 20 }]}>
           <TextInput
             value={title}
             onChangeText={onChangeTitle}
@@ -542,7 +520,7 @@ export default function NoteScreen() {
           ) : null}
         </View>
       ) : paused ? (
-        <View style={[styles.drawPausedRow, { paddingHorizontal: 16 }]}>
+        <View style={[styles.drawPausedRow, { paddingHorizontal: 20 }]}>
           <View
             style={[
               styles.pausedPill,
@@ -570,8 +548,12 @@ export default function NoteScreen() {
           {mode === "text" ? (
             <ScrollView
               style={styles.flex}
-              contentContainerStyle={{ paddingBottom: 16 }}
+              contentContainerStyle={{ paddingBottom: 96 }}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              {...(Platform.OS === "ios"
+                ? { contentInsetAdjustmentBehavior: "automatic" as const }
+                : {})}
             >
               <RichEditor
                 ref={editorRef}
@@ -579,13 +561,15 @@ export default function NoteScreen() {
                 placeholder="Start writing…"
                 onChange={onChangeContent}
                 style={styles.editor}
-                initialHeight={320}
+                initialHeight={360}
                 useContainer
                 editorStyle={{
                   backgroundColor: colors.background,
                   color: colors.foreground,
                   placeholderColor: colors.mutedForeground,
                   caretColor: colors.primary,
+                  contentCSSText:
+                    "padding: 4px 4px 24px 4px; line-height: 1.55; font-size: 16px;",
                 }}
               />
             </ScrollView>
@@ -597,6 +581,7 @@ export default function NoteScreen() {
               tool={tool}
               color={color}
               width={width}
+              penType={penType}
               background={drawBackground}
               viewportWidth={bodySize.w}
               viewportHeight={bodySize.h}
@@ -606,63 +591,21 @@ export default function NoteScreen() {
 
         <View
           style={{
-            backgroundColor: colors.card,
             paddingBottom: insets.bottom,
           }}
         >
           {mode === "text" ? (
-            <RichToolbar
-              editor={editorRef}
-              actions={[
-                actions.undo,
-                actions.redo,
-                actions.setBold,
-                actions.setItalic,
-                actions.setUnderline,
-                actions.heading1,
-                actions.heading2,
-                actions.insertBulletsList,
-                actions.insertOrderedList,
-                actions.checkboxList,
-              ]}
-              iconMap={{
-                [actions.heading1]: ({
-                  tintColor,
-                }: {
-                  tintColor: string;
-                }) => (
-                  <Text style={{ color: tintColor, fontWeight: "700" }}>
-                    H1
-                  </Text>
-                ),
-                [actions.heading2]: ({
-                  tintColor,
-                }: {
-                  tintColor: string;
-                }) => (
-                  <Text style={{ color: tintColor, fontWeight: "700" }}>
-                    H2
-                  </Text>
-                ),
-              }}
-              style={[
-                styles.richToolbar,
-                {
-                  backgroundColor: colors.card,
-                  borderTopColor: colors.border,
-                },
-              ]}
-              iconTint={colors.foreground}
-              selectedIconTint={colors.primary}
-            />
+            <RichTextToolbarV2 editor={editorRef} />
           ) : (
             <DrawingToolbar
               tool={tool}
               color={color}
               width={width}
+              penType={penType}
               onToolChange={onSwitchTool}
               onColorChange={setColor}
               onWidthChange={setWidth}
+              onPenTypeChange={setPenType}
               onUndo={() => {
                 canvasRef.current?.undo();
                 bumpHistory();
@@ -681,47 +624,167 @@ export default function NoteScreen() {
   );
 }
 
-function ModeSegment({
+function HeaderIconButton({
+  icon,
+  accessibilityLabel,
+  surface,
+  tint,
+  onPress,
+  disabled,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  accessibilityLabel: string;
+  surface: string;
+  tint: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const press = useSharedValue(0);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - press.value * 0.08 }],
+  }));
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      disabled={disabled}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+      }}
+      hitSlop={10}
+      style={[
+        styles.iconBtn,
+        {
+          backgroundColor: surface,
+          opacity: disabled ? 0.4 : 1,
+        },
+        animStyle,
+      ]}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Feather name={icon} size={18} color={tint} />
+    </AnimatedPressable>
+  );
+}
+
+function ModeSwitch({
+  mode,
+  onChange,
+  surface,
+  border,
+  active,
+  activeText,
+  idleText,
+}: {
+  mode: Mode;
+  onChange: (mode: Mode) => void;
+  surface: string;
+  border: string;
+  active: string;
+  activeText: string;
+  idleText: string;
+}) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const progress = useSharedValue(mode === "text" ? 0 : 1);
+  useEffect(() => {
+    progress.value = withSpring(mode === "text" ? 0 : 1, {
+      damping: 18,
+      stiffness: 220,
+    });
+  }, [mode, progress]);
+  const pillStyle = useAnimatedStyle(() => {
+    const halfMinusPad = trackWidth > 0 ? (trackWidth - 4) / 2 : 0;
+    return {
+      transform: [{ translateX: progress.value * halfMinusPad }],
+      width: halfMinusPad,
+    };
+  });
+  return (
+    <View
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      style={[
+        styles.modeSwitch,
+        { backgroundColor: surface, borderColor: border },
+      ]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.modePill,
+          { backgroundColor: active },
+          pillStyle,
+        ]}
+      />
+      <ModeSeg
+        label="Text"
+        icon="type"
+        isActive={mode === "text"}
+        onPress={() => onChange("text")}
+        idleText={idleText}
+        activeText={activeText}
+      />
+      <ModeSeg
+        label="Draw"
+        icon="edit-3"
+        isActive={mode === "draw"}
+        onPress={() => onChange("draw")}
+        idleText={idleText}
+        activeText={activeText}
+      />
+    </View>
+  );
+}
+
+function ModeSeg({
   label,
   icon,
-  active,
+  isActive,
   onPress,
-  colors,
+  idleText,
+  activeText,
 }: {
   label: string;
   icon: keyof typeof Feather.glyphMap;
-  active: boolean;
+  isActive: boolean;
   onPress: () => void;
-  colors: ReturnType<typeof useColors>;
+  idleText: string;
+  activeText: string;
 }) {
+  const press = useSharedValue(0);
+  const colorProgress = useSharedValue(isActive ? 1 : 0);
+  useEffect(() => {
+    colorProgress.value = withTiming(isActive ? 1 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [isActive, colorProgress]);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - press.value * 0.04 }],
+  }));
   return (
-    <Tappable
+    <AnimatedPressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.modeSeg,
-        {
-          backgroundColor: active ? colors.primary : "transparent",
-          opacity: pressed ? 0.85 : 1,
-        },
-      ]}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+      }}
+      style={[styles.modeSeg, animStyle]}
       accessibilityLabel={`${label} mode`}
     >
-      <Feather
-        name={icon}
-        size={14}
-        color={active ? colors.primaryForeground : colors.foreground}
-      />
+      <Feather name={icon} size={14} color={isActive ? activeText : idleText} />
       <Text
         style={[
           styles.modeSegText,
-          {
-            color: active ? colors.primaryForeground : colors.foreground,
-          },
+          { color: isActive ? activeText : idleText },
         ]}
       >
         {label}
       </Text>
-    </Tappable>
+    </AnimatedPressable>
   );
 }
 
@@ -732,12 +795,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
   },
   iconBtn: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -749,6 +812,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 2,
     gap: 2,
+    position: "relative",
+    overflow: "hidden",
+  },
+  modePill: {
+    position: "absolute",
+    top: 2,
+    bottom: 2,
+    left: 2,
+    borderRadius: 10,
   },
   modeSeg: {
     flex: 1,
@@ -756,7 +828,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 10,
   },
   modeSegText: {
@@ -766,7 +838,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: 8,
+    paddingBottom: 12,
     gap: 10,
   },
   drawPausedRow: {
@@ -777,8 +849,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
   },
@@ -791,17 +863,13 @@ const styles = StyleSheet.create({
   titleInput: {
     flex: 1,
     fontFamily: "Inter_700Bold",
-    fontSize: 22,
-    letterSpacing: -0.4,
-    paddingVertical: 4,
+    fontSize: 28,
+    letterSpacing: -0.6,
+    paddingVertical: 8,
   },
   editor: {
-    minHeight: 320,
-    paddingHorizontal: 8,
-  },
-  richToolbar: {
-    height: 48,
-    borderTopWidth: 1,
+    minHeight: 360,
+    paddingHorizontal: 20,
   },
   center: {
     flex: 1,

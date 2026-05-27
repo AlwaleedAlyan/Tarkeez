@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import {
   Canvas,
   Circle,
+  DiscretePathEffect,
   Fill,
   Group,
   Path,
@@ -22,7 +23,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { useColors } from "@/hooks/useColors";
-import type { Stroke } from "@/contexts/LibraryContext";
+import type { PenType, Stroke } from "@/contexts/LibraryContext";
 import {
   createMomentumScroller,
   type MomentumScroller,
@@ -50,10 +51,74 @@ type Props = {
   tool: DrawingTool;
   color: string;
   width: number;
+  penType: PenType;
   background: string;
   viewportWidth: number;
   viewportHeight: number;
 };
+
+type StrokeStyle = {
+  opacity: number;
+  strokeWidth: number;
+  strokeCap: "round" | "square" | "butt";
+  strokeJoin: "round" | "miter" | "bevel";
+  grain: boolean;
+};
+
+function strokeStyle(s: Stroke): StrokeStyle {
+  if (s.kind === "highlighter") {
+    return {
+      opacity: 0.32,
+      strokeWidth: s.width,
+      strokeCap: "square",
+      strokeJoin: "miter",
+      grain: false,
+    };
+  }
+  switch (s.penType) {
+    case "pencil":
+      return {
+        opacity: 0.6,
+        strokeWidth: s.width,
+        strokeCap: "square",
+        strokeJoin: "miter",
+        grain: true,
+      };
+    case "marker":
+      return {
+        opacity: 0.94,
+        strokeWidth: s.width * 1.4,
+        strokeCap: "square",
+        strokeJoin: "miter",
+        grain: false,
+      };
+    case "brush":
+      return {
+        opacity: 1,
+        strokeWidth: s.width * 1.55,
+        strokeCap: "round",
+        strokeJoin: "round",
+        grain: false,
+      };
+    case "fountain":
+      return {
+        opacity: 1,
+        strokeWidth: s.width * 0.82,
+        strokeCap: "round",
+        strokeJoin: "round",
+        grain: false,
+      };
+    case "ballpoint":
+    default:
+      return {
+        opacity: 1,
+        strokeWidth: s.width,
+        strokeCap: "round",
+        strokeJoin: "round",
+        grain: false,
+      };
+  }
+}
 
 export type DrawingCanvasHandle = {
   undo: () => void;
@@ -140,6 +205,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
       tool,
       color,
       width,
+      penType,
       background,
       viewportWidth,
       viewportHeight,
@@ -331,6 +397,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
               color,
               width,
               kind: tool === "highlighter" ? "highlighter" : "pen",
+              penType: tool === "highlighter" ? undefined : penType,
               points: [{ x: cx, y: cy }],
             };
             inProgressRef.current = fresh;
@@ -371,7 +438,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
             inProgressRef.current = null;
             setInProgress(null);
           }),
-      [strokes, tool, color, width, commit, ensureRoom],
+      [strokes, tool, color, width, penType, commit, ensureRoom],
     );
 
     // --- Lasso draw gesture (build the lasso polygon) ---
@@ -655,37 +722,49 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
               <Canvas style={{ width: viewportWidth, height: contentHeight }}>
                 <Fill color={background} />
                 {/* Unselected strokes */}
-                {pathBundles.map(({ s, path }, i) =>
-                  selectedIndices.has(i) ? null : (
+                {pathBundles.map(({ s, path }, i) => {
+                  if (selectedIndices.has(i)) return null;
+                  const st = strokeStyle(s);
+                  return (
                     <Path
                       key={i}
                       path={path}
                       color={s.color}
                       style="stroke"
-                      strokeWidth={s.width}
-                      strokeCap="round"
-                      strokeJoin="round"
-                      opacity={s.kind === "highlighter" ? 0.32 : 1}
-                    />
-                  ),
-                )}
+                      strokeWidth={st.strokeWidth}
+                      strokeCap={st.strokeCap}
+                      strokeJoin={st.strokeJoin}
+                      opacity={st.opacity}
+                    >
+                      {st.grain ? (
+                        <DiscretePathEffect length={2.4} deviation={0.9} />
+                      ) : null}
+                    </Path>
+                  );
+                })}
                 {/* Selected strokes (wrapped in live transform) */}
                 {selectedIndices.size > 0 ? (
                   <Group transform={liveTransformProps}>
-                    {pathBundles.map(({ s, path }, i) =>
-                      selectedIndices.has(i) ? (
+                    {pathBundles.map(({ s, path }, i) => {
+                      if (!selectedIndices.has(i)) return null;
+                      const st = strokeStyle(s);
+                      return (
                         <Path
                           key={i}
                           path={path}
                           color={s.color}
                           style="stroke"
-                          strokeWidth={s.width}
-                          strokeCap="round"
-                          strokeJoin="round"
-                          opacity={s.kind === "highlighter" ? 0.32 : 1}
-                        />
-                      ) : null,
-                    )}
+                          strokeWidth={st.strokeWidth}
+                          strokeCap={st.strokeCap}
+                          strokeJoin={st.strokeJoin}
+                          opacity={st.opacity}
+                        >
+                          {st.grain ? (
+                            <DiscretePathEffect length={2.4} deviation={0.9} />
+                          ) : null}
+                        </Path>
+                      );
+                    })}
                     {selectionBBox ? (
                       <>
                         <Rect
@@ -713,15 +792,24 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, Props>(
                 ) : null}
                 {/* In-progress stroke (pen / highlighter) */}
                 {inProgressPath && inProgress ? (
-                  <Path
-                    path={inProgressPath}
-                    color={inProgress.color}
-                    style="stroke"
-                    strokeWidth={inProgress.width}
-                    strokeCap="round"
-                    strokeJoin="round"
-                    opacity={inProgress.kind === "highlighter" ? 0.32 : 1}
-                  />
+                  (() => {
+                    const st = strokeStyle(inProgress);
+                    return (
+                      <Path
+                        path={inProgressPath}
+                        color={inProgress.color}
+                        style="stroke"
+                        strokeWidth={st.strokeWidth}
+                        strokeCap={st.strokeCap}
+                        strokeJoin={st.strokeJoin}
+                        opacity={st.opacity}
+                      >
+                        {st.grain ? (
+                          <DiscretePathEffect length={2.4} deviation={0.9} />
+                        ) : null}
+                      </Path>
+                    );
+                  })()
                 ) : null}
                 {/* Lasso polygon (in-progress) */}
                 {lassoSkPath ? (

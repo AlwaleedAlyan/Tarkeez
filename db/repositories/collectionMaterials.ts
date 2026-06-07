@@ -251,6 +251,7 @@ function useLiveCMRowsNative(userId: string | undefined): CMRow[] {
           isNull(schema.collections.deletedAt),
         ),
       ),
+    [uid],
   );
   return data.map((r) => ({
     collectionId: r.collectionId,

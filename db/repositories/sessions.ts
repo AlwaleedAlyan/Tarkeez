@@ -19,7 +19,6 @@ type ApiSessionRow = {
   pageTimes: Record<number, number> | null;
   selections: number | null;
   wordsAdded: number | null;
-  keystrokes: number | null;
   strokesAdded: number | null;
   createdAt: string;
 };
@@ -38,7 +37,6 @@ export type SessionUpsertInput = {
   pageTimes: Record<number, number> | null;
   selections: number | null;
   wordsAdded: number | null;
-  keystrokes: number | null;
   strokesAdded: number | null;
   createdAt: number;
   pendingSync?: boolean;
@@ -66,7 +64,6 @@ export async function upsertSessionsFromServer(
         pageTimesJson: r.pageTimes ? JSON.stringify(r.pageTimes) : null,
         selections: r.selections,
         wordsAdded: r.wordsAdded,
-        keystrokes: r.keystrokes,
         strokesAdded: r.strokesAdded,
         createdAt: r.createdAt,
         syncStatus: r.pendingSync ? "pending_create" : "synced",
@@ -105,7 +102,6 @@ function sessionFromRow(r: SessionRow): Session {
     pageTimes,
     selections: r.selections ?? undefined,
     wordsAdded: r.wordsAdded ?? undefined,
-    keystrokes: r.keystrokes ?? undefined,
     strokesAdded: r.strokesAdded ?? undefined,
     pendingSync: r.syncStatus !== "synced",
   };
@@ -131,7 +127,6 @@ export async function insertPendingSessionLocal(
       pageTimesJson: r.pageTimes ? JSON.stringify(r.pageTimes) : null,
       selections: r.selections,
       wordsAdded: r.wordsAdded,
-      keystrokes: r.keystrokes,
       strokesAdded: r.strokesAdded,
       createdAt: r.createdAt,
       syncStatus: "pending_create",
@@ -163,6 +158,7 @@ function useLiveSessionsNative(userId: string | undefined): Session[] {
       .from(schema.studySessions)
       .where(eq(schema.studySessions.userId, uid))
       .orderBy(desc(schema.studySessions.startedAt)),
+    [uid],
   );
   return data.map(sessionFromRow);
 }
@@ -200,7 +196,6 @@ export async function pullSessions(userId: string): Promise<void> {
       pageTimes: s.pageTimes ?? null,
       selections: s.selections ?? null,
       wordsAdded: s.wordsAdded ?? null,
-      keystrokes: s.keystrokes ?? null,
       strokesAdded: s.strokesAdded ?? null,
       createdAt: s.endedAt,
       pendingSync: false,
@@ -255,7 +250,6 @@ export async function upsertLocalPendingSessions(
         pageTimesJson: r.pageTimes ? JSON.stringify(r.pageTimes) : null,
         selections: r.selections,
         wordsAdded: r.wordsAdded,
-        keystrokes: r.keystrokes,
         strokesAdded: r.strokesAdded,
         createdAt: r.createdAt,
         syncStatus: r.pendingSync ? "pending_create" : "synced",

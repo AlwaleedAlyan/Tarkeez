@@ -115,7 +115,6 @@ export type Session = {
   pageTimes?: Record<number, number>;
   selections?: number;
   wordsAdded?: number;
-  keystrokes?: number;
   strokesAdded?: number;
   pendingSync?: boolean;
 };
@@ -194,7 +193,6 @@ type ApiSession = {
   pageTimes: Record<number, number> | null;
   selections: number | null;
   wordsAdded: number | null;
-  keystrokes: number | null;
   strokesAdded: number | null;
   createdAt: string;
 };
@@ -242,7 +240,6 @@ function sessionFromApi(s: ApiSession): Session {
     pageTimes: s.pageTimes ?? undefined,
     selections: s.selections ?? undefined,
     wordsAdded: s.wordsAdded ?? undefined,
-    keystrokes: s.keystrokes ?? undefined,
     strokesAdded: s.strokesAdded ?? undefined,
   };
 }
@@ -261,7 +258,6 @@ function sessionToApi(s: Session): Omit<ApiSession, "createdAt"> {
     pageTimes: s.pageTimes ?? null,
     selections: s.selections ?? null,
     wordsAdded: s.wordsAdded ?? null,
-    keystrokes: s.keystrokes ?? null,
     strokesAdded: s.strokesAdded ?? null,
   };
 }
@@ -649,7 +645,6 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
               pageTimes: s.pageTimes ?? null,
               selections: s.selections ?? null,
               wordsAdded: s.wordsAdded ?? null,
-              keystrokes: s.keystrokes ?? null,
               strokesAdded: s.strokesAdded ?? null,
               createdAt: s.endedAt,
               pendingSync: false,
@@ -934,6 +929,25 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const recordSession = useCallback(
     async (s: Omit<Session, "id">) => {
       if (!user) return;
+      // 3-way XOR pre-flight: study_sessions.ss_one_target_chk requires
+      // exactly one of (material_id, note_id, external_url) to be non-null.
+      // Failing this in SQLite throws a CHECK violation that we swallow in
+      // the catch below; surfacing it here makes the cause visible.
+      const targetCount =
+        (s.materialId ? 1 : 0) +
+        (s.noteId ? 1 : 0) +
+        (s.externalUrl ? 1 : 0);
+      if (targetCount !== 1) {
+        console.warn(
+          "[session] skipped — XOR constraint would fail",
+          {
+            materialId: s.materialId,
+            noteId: s.noteId,
+            externalUrl: s.externalUrl,
+          },
+        );
+        return;
+      }
       const session: Session = { ...s, id: uuidV4() };
       const localFirst: Session = { ...session, pendingSync: true };
       // !db (Safari/Firefox legacy): persist to React state + AsyncStorage
@@ -958,7 +972,6 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           pageTimes: session.pageTimes ?? null,
           selections: session.selections ?? null,
           wordsAdded: session.wordsAdded ?? null,
-          keystrokes: session.keystrokes ?? null,
           strokesAdded: session.strokesAdded ?? null,
           createdAt: session.endedAt,
           pendingSync: true,

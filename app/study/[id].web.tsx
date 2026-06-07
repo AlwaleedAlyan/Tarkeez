@@ -84,11 +84,12 @@ export default function StudyScreenWeb() {
     });
   }, [recordSession]);
 
-  useEffect(() => {
-    return () => {
-      finalize();
-    };
-  }, [finalize]);
+  // Ref-stable cleanup: re-memoizing `finalize` must not trip the
+  // cleanup, or `finalizedRef.current` flips to true while the user is
+  // still on the screen, and the real unmount no-ops.
+  const finalizeRef = useRef(finalize);
+  finalizeRef.current = finalize;
+  useEffect(() => () => finalizeRef.current(), []);
 
   useEffect(() => {
     if (!id || !material) return;

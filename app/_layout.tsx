@@ -21,7 +21,6 @@ import "@/db/handlers/sessions";
 import "@/db/handlers/collections";
 import "@/db/handlers/notes";
 import "@/db/handlers/materials";
-import { logSessionsDiagnostic } from "@/db/diagnostics";
 import { ensureSessionsSchema } from "@/db/ensureSessionsSchema";
 import { useDbMigrations } from "@/db/migrate";
 import { start as startSync, stop as stopSync } from "@/db/sync";
@@ -123,9 +122,8 @@ export default function RootLayout() {
   // its live queries) mount. No-op when the schema is already current.
   useEffect(() => {
     if (!dbBootDone) return;
-    if (dbError) console.error("[diag] db migration error at boot:", dbError);
+    if (dbError) console.error("[db] migration error at boot:", dbError);
     ensureSessionsSchema();
-    logSessionsDiagnostic();
     setSchemaReady(true);
   }, [dbBootDone]);
 

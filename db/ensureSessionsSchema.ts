@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS \`__heal_study_sessions\` (
   \`page_times_json\` text,
   \`selections\` integer,
   \`words_added\` integer,
-  \`keystrokes\` integer,
   \`strokes_added\` integer,
   \`created_at\` integer NOT NULL,
   \`sync_status\` text DEFAULT 'pending_create' NOT NULL,
@@ -39,28 +38,34 @@ CREATE TABLE IF NOT EXISTS \`__heal_study_sessions\` (
      + CASE WHEN "__heal_study_sessions"."note_id" IS NOT NULL THEN 1 ELSE 0 END
      + CASE WHEN "__heal_study_sessions"."external_url" IS NOT NULL THEN 1 ELSE 0 END) = 1)
 );
-INSERT INTO \`__heal_study_sessions\`("id", "user_id", "material_id", "note_id", "external_url", "started_at", "ended_at", "duration_sec", "paused_sec", "pages_read", "page_times_json", "selections", "words_added", "keystrokes", "strokes_added", "created_at", "sync_status")
-  SELECT "id", "user_id", "material_id", "note_id", NULL, "started_at", "ended_at", "duration_sec", "paused_sec", "pages_read", "page_times_json", "selections", "words_added", "keystrokes", "strokes_added", "created_at", "sync_status" FROM \`study_sessions\`;
+INSERT INTO \`__heal_study_sessions\`("id", "user_id", "material_id", "note_id", "external_url", "started_at", "ended_at", "duration_sec", "paused_sec", "pages_read", "page_times_json", "selections", "words_added", "strokes_added", "created_at", "sync_status")
+  SELECT "id", "user_id", "material_id", "note_id", NULL, "started_at", "ended_at", "duration_sec", "paused_sec", "pages_read", "page_times_json", "selections", "words_added", "strokes_added", "created_at", "sync_status" FROM \`study_sessions\`;
 DROP TABLE \`study_sessions\`;
 ALTER TABLE \`__heal_study_sessions\` RENAME TO \`study_sessions\`;
 CREATE INDEX IF NOT EXISTS \`sessions_user_idx\` ON \`study_sessions\` (\`user_id\`);
 CREATE INDEX IF NOT EXISTS \`sessions_sync_idx\` ON \`study_sessions\` (\`sync_status\`) WHERE "study_sessions"."sync_status" != 'synced';
 `;
 
-function hasExternalUrlColumn(): boolean {
-  if (!sqlite) return true;
+function studySessionsColumns(): Set<string> {
+  if (!sqlite) return new Set();
   const cols = sqlite.getAllSync<{ name: string }>(
     "PRAGMA table_info('study_sessions')",
   );
-  return cols.some((c) => c.name === "external_url");
+  return new Set(cols.map((c) => c.name));
 }
 
 export function ensureSessionsSchema(): void {
   if (!sqlite) return; // legacy (db == null) path has no SQLite table
   try {
-    if (hasExternalUrlColumn()) return;
+    const cols = studySessionsColumns();
+    const needsExternalUrl = !cols.has("external_url");
+    // `keystrokes` was dropped by migration 0004. If it's still present, the
+    // migration didn't run on this device and our schema.ts is out of sync
+    // with the live table — every insert references the wrong column shape.
+    const needsDropKeystrokes = cols.has("keystrokes");
+    if (!needsExternalUrl && !needsDropKeystrokes) return;
     console.warn(
-      "[db] study_sessions is missing external_url — rebuilding table to repair a stale/failed migration",
+      `[db] study_sessions drift detected (needsExternalUrl=${needsExternalUrl} needsDropKeystrokes=${needsDropKeystrokes}) — rebuilding`,
     );
     sqlite.execSync(REBUILD_SQL);
     console.info("[db] study_sessions schema repaired");

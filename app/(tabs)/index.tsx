@@ -112,6 +112,16 @@ export default function LibraryScreen() {
       router.push(`/study/${m.id}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not import PDF.";
+      // expo-document-picker throws this when a previous picker was dismissed
+      // by navigating away rather than cancelling. The native presentation
+      // count is stuck; user just needs to try again. Treat it as a soft retry.
+      if (/different document picker.*already in progress|already in progress/i.test(msg)) {
+        Alert.alert(
+          "Picker busy",
+          "A file picker is still open in the background. Tap import again.",
+        );
+        return;
+      }
       Alert.alert("Import failed", msg);
     } finally {
       setImporting(false);
@@ -136,7 +146,11 @@ export default function LibraryScreen() {
 
   const runFromMenu = (action: () => void) => {
     setAddMenuOpen(false);
-    action();
+    // Wait for the modal exit animation to finish before presenting a native
+    // picker — iOS rejects a second view-controller presentation while one is
+    // still dismissing, which leaves DocumentPicker in an "already in
+    // progress" state on subsequent taps.
+    setTimeout(action, 350);
   };
 
   const onCreateCollection = async (name: string) => {
@@ -269,6 +283,7 @@ export default function LibraryScreen() {
           item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
         }
         scrollEnabled={!showEmptyState}
+        keyboardDismissMode="on-drag"
         itemLayoutAnimation={LinearTransition.springify()
           .damping(22)
           .stiffness(180)}

@@ -15,26 +15,24 @@ import { EmptyState } from "@/components/EmptyState";
 import { SharePostModal } from "@/components/SharePostModal";
 import { StatTile } from "@/components/StatTile";
 import { StrokeThumbnail } from "@/components/StrokeThumbnail";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
 import { safeHost } from "@/lib/normalizeUrl";
 
-type Metric = "pages" | "words" | "keystrokes";
+type Metric = "pages" | "words";
 const METRIC_KEY = "@Tarkeez/insights_metric";
 const METRIC_LABEL: Record<Metric, string> = {
   pages: "Pages",
   words: "Words",
-  keystrokes: "Keystrokes",
 };
 const METRIC_TILE_LABEL: Record<Metric, string> = {
   pages: "Pages read",
   words: "Words written",
-  keystrokes: "Keystrokes",
 };
 const METRIC_ICON: Record<Metric, keyof typeof Feather.glyphMap> = {
   pages: "file-text",
   words: "type",
-  keystrokes: "command",
 };
 
 function fmtDuration(totalSec: number) {
@@ -57,6 +55,7 @@ export default function InsightsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { sessions, materials, notes } = useLibrary();
+  const { user } = useAuth();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -65,8 +64,7 @@ export default function InsightsScreen() {
   useEffect(() => {
     AsyncStorage.getItem(METRIC_KEY)
       .then((raw) => {
-        if (raw === "pages" || raw === "words" || raw === "keystrokes")
-          setMetric(raw);
+        if (raw === "pages" || raw === "words") setMetric(raw);
       })
       .catch(() => {});
   }, []);
@@ -92,10 +90,8 @@ export default function InsightsScreen() {
 
     let totalPages = 0;
     let totalWords = 0;
-    let totalKeystrokes = 0;
     let todayPages = 0;
     let todayWords = 0;
-    let todayKeystrokes = 0;
 
     // Rolling 7-day buckets, oldest → newest. Index 6 is today.
     const dayBuckets = Array(7).fill(0);
@@ -109,7 +105,6 @@ export default function InsightsScreen() {
         totalPages += s.pagesRead ?? 0;
       } else if (s.noteId) {
         totalWords += s.wordsAdded ?? 0;
-        totalKeystrokes += s.keystrokes ?? 0;
       }
 
       const t = s.startedAt;
@@ -118,10 +113,7 @@ export default function InsightsScreen() {
         todaySec += s.durationSec;
         todayPausedSec += paused;
         if (s.materialId) todayPages += s.pagesRead ?? 0;
-        else if (s.noteId) {
-          todayWords += s.wordsAdded ?? 0;
-          todayKeystrokes += s.keystrokes ?? 0;
-        }
+        else if (s.noteId) todayWords += s.wordsAdded ?? 0;
       }
       if (t >= sevenDaysAgo) {
         weekSec += s.durationSec;
@@ -146,10 +138,8 @@ export default function InsightsScreen() {
 
       totalPages,
       totalWords,
-      totalKeystrokes,
       todayPages,
       todayWords,
-      todayKeystrokes,
 
       sessionsCount: sessions.length,
       dayBuckets,
@@ -161,17 +151,9 @@ export default function InsightsScreen() {
   }, [sessions]);
 
   const metricValueTotal =
-    metric === "pages"
-      ? stats.totalPages
-      : metric === "words"
-        ? stats.totalWords
-        : stats.totalKeystrokes;
+    metric === "pages" ? stats.totalPages : stats.totalWords;
   const metricValueToday =
-    metric === "pages"
-      ? stats.todayPages
-      : metric === "words"
-        ? stats.todayWords
-        : stats.todayKeystrokes;
+    metric === "pages" ? stats.todayPages : stats.todayWords;
 
   const [shareOpen, setShareOpen] = useState(false);
   const useToday = stats.todaySec > 0;
@@ -280,7 +262,7 @@ export default function InsightsScreen() {
             Display
           </Text>
           <View style={styles.metricRow}>
-            {(["pages", "words", "keystrokes"] as Metric[]).map((m) => {
+            {(["pages", "words"] as Metric[]).map((m) => {
               const active = metric === m;
               return (
                 <Tappable

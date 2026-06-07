@@ -154,7 +154,12 @@ export default function BrowserView() {
       if (savedRef.current) return;
       const durationSec = focusSecRef.current;
       if (durationSec < 5) return;
-      const externalUrl = lastEducationalUrlRef.current ?? url ?? null;
+      // Always store *some* external_url so the study_sessions XOR check
+      // (exactly one of material_id/note_id/external_url) passes. Prefer the
+      // educational verdict's URL when present; otherwise fall back to the
+      // bare current-page domain so the visit is still counted as time spent.
+      const fallbackDomain = url ? extractDomain(url) : null;
+      const externalUrl = lastEducationalUrlRef.current ?? fallbackDomain;
       if (!externalUrl) return;
       savedRef.current = true;
       void recordSession({

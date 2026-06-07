@@ -304,6 +304,7 @@ function useLiveNotesNative(userId: string | undefined): Note[] {
         and(eq(schema.notes.userId, uid), isNull(schema.notes.deletedAt)),
       )
       .orderBy(desc(schema.notes.createdAt)),
+    [uid],
   );
   return data.map(noteFromRow);
 }

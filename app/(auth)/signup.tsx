@@ -62,6 +62,7 @@ export default function SignupScreen() {
           justifyContent: "space-between",
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={24}
       >
         <View style={styles.header}>

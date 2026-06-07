@@ -17,7 +17,6 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import {
@@ -458,7 +457,7 @@ function IconBtn({
   }, [active, activeProgress]);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.08 }],
+    transform: [{ scale: 1 - press.value * 0.04 }],
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
@@ -470,10 +469,10 @@ function IconBtn({
     <AnimatedPressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       accessibilityLabel={label}
       style={[styles.btn, animStyle]}
@@ -511,7 +510,7 @@ function LabelBtn({
   }, [active, activeProgress]);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.08 }],
+    transform: [{ scale: 1 - press.value * 0.04 }],
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
@@ -523,10 +522,10 @@ function LabelBtn({
     <AnimatedPressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       accessibilityLabel={accessibilityLabel}
       style={[styles.btn, animStyle]}

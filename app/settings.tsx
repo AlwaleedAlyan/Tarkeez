@@ -185,6 +185,7 @@ export default function SettingsScreen() {
           paddingBottom: bottomPad,
           gap: 24,
         }}
+        keyboardDismissMode="on-drag"
       >
         {/* Account */}
         <Section title="Account" colors={colors}>

@@ -497,7 +497,7 @@ export async function api<T = unknown>(
     const { data, error } = await supabase
       .from("study_sessions")
       .select(
-        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, strokes_added, created_at",
       )
       .eq("user_id", user.id)
       .order("started_at", { ascending: false });
@@ -515,7 +515,6 @@ export async function api<T = unknown>(
       pageTimes: s.page_times ?? null,
       selections: s.selections ?? null,
       wordsAdded: s.words_added ?? null,
-      keystrokes: s.keystrokes ?? null,
       strokesAdded: s.strokes_added ?? null,
       createdAt: s.created_at,
     }));
@@ -558,14 +557,13 @@ export async function api<T = unknown>(
       page_times: session.pageTimes ?? null,
       selections: session.selections ?? null,
       words_added: session.wordsAdded ?? null,
-      keystrokes: session.keystrokes ?? null,
       strokes_added: session.strokesAdded ?? null,
     };
     const { data, error } = await supabase
       .from("study_sessions")
       .insert(insertRow)
       .select(
-        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, keystrokes, strokes_added, created_at",
+        "id, material_id, note_id, external_url, started_at, ended_at, duration_sec, paused_sec, pages_read, page_times, selections, words_added, strokes_added, created_at",
       )
       .single();
     if (error) throw new ApiError(error.message, 400);
@@ -583,7 +581,6 @@ export async function api<T = unknown>(
         pageTimes: data.page_times ?? null,
         selections: data.selections ?? null,
         wordsAdded: data.words_added ?? null,
-        keystrokes: data.keystrokes ?? null,
         strokesAdded: data.strokes_added ?? null,
         createdAt: data.created_at,
       },

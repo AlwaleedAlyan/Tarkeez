@@ -89,6 +89,7 @@ export default function BrowserScreen() {
           gap: 24,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View>
           <Text style={[styles.kicker, { color: colors.mutedForeground }]}>

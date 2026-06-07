@@ -106,8 +106,6 @@ export default function NoteScreenWeb() {
   const finalizedRef = useRef(false);
   const initialWordsRef = useRef(0);
   const initialStrokesCountRef = useRef(0);
-  const keystrokesRef = useRef(0);
-  const lastTextLenRef = useRef(0);
 
   const titleRef = useRef("");
   const contentRef = useRef("");
@@ -123,7 +121,6 @@ export default function NoteScreenWeb() {
     initializedRef.current = true;
     initialWordsRef.current = countWords(note.contentHtml);
     initialStrokesCountRef.current = note.drawingStrokes.length;
-    lastTextLenRef.current = stripHtml(note.contentHtml).length;
   }, [note]);
 
   // Hydrate the contentEditable div once we have the initial content.
@@ -181,10 +178,6 @@ export default function NoteScreenWeb() {
   }, []);
 
   const onChangeTitle = (next: string) => {
-    if (initializedRef.current) {
-      const delta = Math.abs(next.length - title.length);
-      keystrokesRef.current += delta;
-    }
     setTitle(next);
     if (!initializedRef.current) return;
     scheduleTextSave({ title: next });
@@ -193,12 +186,6 @@ export default function NoteScreenWeb() {
   const onEditorInput = useCallback(() => {
     if (!editorRef.current) return;
     const html = editorRef.current.innerHTML;
-    if (initializedRef.current) {
-      const newLen = stripHtml(html).length;
-      const delta = Math.abs(newLen - lastTextLenRef.current);
-      keystrokesRef.current += delta;
-      lastTextLenRef.current = newLen;
-    }
     setContent(html);
     if (!initializedRef.current) return;
     scheduleTextSave({ contentHtml: html });
@@ -258,18 +245,15 @@ export default function NoteScreenWeb() {
       durationSec,
       pausedSec: 0,
       wordsAdded,
-      keystrokes: keystrokesRef.current,
       strokesAdded,
     }).catch(() => {
       /* swallow */
     });
   }, [id, recordSession]);
 
-  useEffect(() => {
-    return () => {
-      finalize();
-    };
-  }, [finalize]);
+  const finalizeRef = useRef(finalize);
+  finalizeRef.current = finalize;
+  useEffect(() => () => finalizeRef.current(), []);
 
   const onBack = useCallback(async () => {
     if (saveTimerRef.current) {

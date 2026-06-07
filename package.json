@@ -81,6 +81,7 @@
     "expo-print": "^55.0.14",
     "expo-sharing": "~14.0.8",
     "expo-sqlite": "~16.0.10",
+    "expo-video": "~3.0.16",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-pell-rich-editor": "^1.10.0",

@@ -175,6 +175,7 @@ function useLiveCollectionsNative(userId: string | undefined): Collection[] {
         ),
       )
       .orderBy(desc(schema.collections.createdAt)),
+    [uid],
   );
   return data.map(collectionFromRow);
 }

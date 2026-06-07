@@ -60,6 +60,7 @@ export default function LoginScreen() {
           justifyContent: "space-between",
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={24}
       >
         <View style={styles.header}>

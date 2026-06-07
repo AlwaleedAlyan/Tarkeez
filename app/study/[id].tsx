@@ -108,6 +108,20 @@ export default function StudyScreen() {
   const annosDirtyRef = useRef<boolean>(false);
   const savedRef = useRef<boolean>(false);
   const webViewRef = useRef<WebView>(null);
+  // Mirror these into refs so the unmount cleanup (which runs with []
+  // deps) reads the latest values instead of the mount-time zeros.
+  const secondsRef = useRef(0);
+  secondsRef.current = seconds;
+  const pausedSecRef = useRef(0);
+  pausedSecRef.current = pausedSec;
+  const totalPagesRef = useRef<number | undefined>(undefined);
+  totalPagesRef.current = totalPages;
+  // `material` is derived from a live query — undefined on the first render
+  // if liveMaterials hasn't returned yet. Closing over the first-render value
+  // (which we do with [] deps below) loses every session for the cold-launch
+  // path. Mirror to a ref the cleanup can read at unmount time.
+  const materialRef = useRef<typeof material>(material);
+  materialRef.current = material;
 
   // Load PDF + annotations. Re-runs when loadAttempt increments (Retry button).
   useEffect(() => {
@@ -326,29 +340,36 @@ export default function StudyScreen() {
     exitToLibrary,
   ]);
 
-  // Unmount safety net
+  // Unmount safety net — reads through refs because [] deps means the
+  // cleanup closes over mount-time state. Using closure `seconds`/`material`
+  // would see 0 / undefined (when liveMaterials hadn't returned yet) and
+  // silently skip the recordSession call.
   useEffect(() => {
     return () => {
-      if (savedRef.current || !material) return;
+      const m = materialRef.current;
+      if (savedRef.current || !m) return;
       const endedAt = Date.now();
-      const pagesRead = Math.max(0, currentPage - startPageRef.current);
-      void saveAnnotations(material.id, annotationsRef.current);
-      if (seconds < 5 && pagesRead === 0 && selectionsRef.current === 0) return;
+      const sec = secondsRef.current;
+      const paused = pausedSecRef.current;
+      const page = currentPageRef.current;
+      const pagesRead = Math.max(0, page - startPageRef.current);
+      void saveAnnotations(m.id, annotationsRef.current);
+      if (sec < 5 && pagesRead === 0 && selectionsRef.current === 0) return;
       savedRef.current = true;
       void recordSession({
-        materialId: material.id,
+        materialId: m.id,
         noteId: null,
         startedAt: startedAtRef.current,
         endedAt,
-        durationSec: seconds,
-        pausedSec,
+        durationSec: sec,
+        pausedSec: paused,
         pagesRead,
         pageTimes: { ...pageTimesRef.current },
         selections: selectionsRef.current,
       });
-      void updateMaterial(material.id, {
-        currentPage,
-        totalPages: totalPages ?? material.totalPages,
+      void updateMaterial(m.id, {
+        currentPage: page,
+        totalPages: totalPagesRef.current ?? m.totalPages,
       });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -129,8 +129,6 @@ export default function NoteScreen() {
   // Output deltas, snapshot at mount.
   const initialWordsRef = useRef(0);
   const initialStrokesCountRef = useRef(0);
-  const keystrokesRef = useRef(0);
-  const lastTextLenRef = useRef(0);
   const finalizedRef = useRef(false);
 
   // Live values for finalize() — refs avoid stale closures in the unmount cleanup.
@@ -157,7 +155,6 @@ export default function NoteScreen() {
     initializedRef.current = true;
     initialWordsRef.current = countWords(note.contentHtml);
     initialStrokesCountRef.current = note.drawingStrokes.length;
-    lastTextLenRef.current = stripHtml(note.contentHtml).length;
   }, [note]);
 
   useEffect(() => {
@@ -222,7 +219,6 @@ export default function NoteScreen() {
       durationSec,
       pausedSec: pausedSecRef.current,
       wordsAdded,
-      keystrokes: keystrokesRef.current,
       strokesAdded,
     }).catch(() => {
       /* swallow — local copy already in cache via persistSessions */
@@ -231,11 +227,14 @@ export default function NoteScreen() {
 
   // Backstop: record on hard unmount (swipe-back, navigation pop) so a session
   // is captured even if onBack didn't run.
-  useEffect(() => {
-    return () => {
-      finalize();
-    };
-  }, [finalize]);
+  //
+  // Ref-stable: `finalize` re-memos whenever `recordSession` does, and using
+  // `[finalize]` deps fires the cleanup on every re-memo — that flips
+  // `finalizedRef.current` while the user is still editing, and the real
+  // unmount silently no-ops.
+  const finalizeRef = useRef(finalize);
+  finalizeRef.current = finalize;
+  useEffect(() => () => finalizeRef.current(), []);
 
   const flushTextSave = useCallback(
     async (patch: { title?: string; contentHtml?: string }) => {
@@ -267,24 +266,14 @@ export default function NoteScreen() {
   }, []);
 
   const onChangeTitle = (next: string) => {
-    if (initializedRef.current) {
-      const delta = Math.abs(next.length - title.length);
-      keystrokesRef.current += delta;
-      bumpActivity();
-    }
+    if (initializedRef.current) bumpActivity();
     setTitle(next);
     if (!initializedRef.current) return;
     scheduleTextSave({ title: next });
   };
 
   const onChangeContent = (html: string) => {
-    if (initializedRef.current) {
-      const newLen = stripHtml(html).length;
-      const delta = Math.abs(newLen - lastTextLenRef.current);
-      keystrokesRef.current += delta;
-      lastTextLenRef.current = newLen;
-      bumpActivity();
-    }
+    if (initializedRef.current) bumpActivity();
     setContent(html);
     if (!initializedRef.current) return;
     scheduleTextSave({ contentHtml: html });
@@ -550,6 +539,7 @@ export default function NoteScreen() {
               style={styles.flex}
               contentContainerStyle={{ paddingBottom: 96 }}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               {...(Platform.OS === "ios"
                 ? { contentInsetAdjustmentBehavior: "automatic" as const }
@@ -641,17 +631,17 @@ function HeaderIconButton({
 }) {
   const press = useSharedValue(0);
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.08 }],
+    transform: [{ scale: 1 - press.value * 0.04 }],
   }));
   return (
     <AnimatedPressable
       onPress={onPress}
       disabled={disabled}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       hitSlop={10}
       style={[
@@ -767,10 +757,10 @@ function ModeSeg({
     <AnimatedPressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       style={[styles.modeSeg, animStyle]}
       accessibilityLabel={`${label} mode`}

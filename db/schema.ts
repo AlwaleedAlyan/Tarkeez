@@ -121,7 +121,6 @@ export const studySessions = sqliteTable(
     pageTimesJson: text("page_times_json"),
     selections: integer("selections"),
     wordsAdded: integer("words_added"),
-    keystrokes: integer("keystrokes"),
     strokesAdded: integer("strokes_added"),
     createdAt: integer("created_at").notNull(),
     syncStatus: text("sync_status").notNull().default("pending_create"),

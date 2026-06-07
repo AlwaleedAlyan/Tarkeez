@@ -40,7 +40,9 @@ export async function pullAll(userId: string): Promise<void> {
         /* best effort */
       }
     } else {
-      console.warn("[pull] some entities failed", errors);
+      // Route each error through logRejection so offline failures stay quiet
+      // while genuine schema/server errors still surface as console.error.
+      for (const e of errors) logRejection("pull", e);
     }
   } finally {
     pulling = false;

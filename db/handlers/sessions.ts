@@ -17,7 +17,6 @@ type SessionPushPayload = {
   pageTimes: Record<number, number> | null;
   selections: number | null;
   wordsAdded: number | null;
-  keystrokes: number | null;
   strokesAdded: number | null;
 };
 

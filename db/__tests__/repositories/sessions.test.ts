@@ -30,7 +30,6 @@ function makeSession(id: string, overrides: Record<string, unknown> = {}) {
     pageTimes: null,
     selections: null,
     wordsAdded: null,
-    keystrokes: null,
     strokesAdded: null,
     createdAt: 1_000_000,
     ...overrides,

@@ -50,7 +50,6 @@ async function drainSessions(userId: string): Promise<void> {
         pageTimes: s.pageTimes ?? null,
         selections: s.selections ?? null,
         wordsAdded: s.wordsAdded ?? null,
-        keystrokes: s.keystrokes ?? null,
         strokesAdded: s.strokesAdded ?? null,
         createdAt: s.endedAt,
         pendingSync: s.pendingSync === true,

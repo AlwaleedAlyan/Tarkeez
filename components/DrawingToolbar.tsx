@@ -17,7 +17,6 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -419,7 +418,7 @@ function ToolButton({
   }, [active, activeProgress]);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.08 }],
+    transform: [{ scale: 1 - press.value * 0.04 }],
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
@@ -431,10 +430,10 @@ function ToolButton({
     <AnimatedPressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       disabled={disabled}
       accessibilityLabel={label}
@@ -466,16 +465,16 @@ function PressablePill({
 }) {
   const press = useSharedValue(0);
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.08 }],
+    transform: [{ scale: 1 - press.value * 0.04 }],
   }));
   return (
     <AnimatedPressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withSpring(1, { damping: 18, stiffness: 320 });
+        press.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 18, stiffness: 320 });
+        press.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
       }}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}

@@ -284,6 +284,7 @@ function useLiveMaterialsNative(userId: string | undefined): Material[] {
         ),
       )
       .orderBy(desc(schema.materials.createdAt)),
+    [uid],
   );
   return data.map(materialFromRow);
 }

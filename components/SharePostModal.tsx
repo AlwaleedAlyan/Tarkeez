@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -57,6 +58,7 @@ export function SharePostModal({
   const insets = useSafeAreaInsets();
   const cardRef = useRef<View>(null);
   const [busy, setBusy] = useState(false);
+  const [isTransparentMode, setIsTransparentMode] = useState(false);
 
   const captureCard = async () => {
     return captureRef(cardRef, {
@@ -158,38 +160,60 @@ export function SharePostModal({
           <View
             ref={cardRef}
             collapsable={false}
-            style={[styles.card, { width: CARD_W, height: CARD_H }]}
+            style={[
+              styles.card,
+              { width: CARD_W, height: CARD_H },
+              isTransparentMode && { backgroundColor: "transparent" }
+            ]}
           >
-            <LinearGradient
-              colors={["#0a0a0a", "#161616"]}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <LinearGradient
-              colors={[colors.primary + "55", "transparent"]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
+            {!isTransparentMode && (
+              <>
+                <LinearGradient
+                  colors={["#0a0a0a", "#161616"]}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <LinearGradient
+                  colors={[colors.primary + "55", "transparent"]}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              </>
+            )}
 
             <View style={styles.statsCol}>
-              <Stat value={metricValue.toString()} label={metricLabel} />
-              <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />
-              <Stat value={fmtDuration(focusedSec)} label="Time" />
-              <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />
-              <Stat value={`${focusPct}%`} label="Focus" />
+              <Stat value={metricValue.toString()} label={metricLabel} isTransparentMode={isTransparentMode} />
+              {!isTransparentMode && <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />}
+              <Stat value={fmtDuration(focusedSec)} label="Time" isTransparentMode={isTransparentMode} />
+              {!isTransparentMode && <View style={[styles.statDivider, { backgroundColor: "#ffffff20" }]} />}
+              <Stat value={`${focusPct}%`} label="Focus" isTransparentMode={isTransparentMode} />
             </View>
 
-            <View style={[styles.hDivider, { backgroundColor: "#ffffff14" }]} />
+            {!isTransparentMode && <View style={[styles.hDivider, { backgroundColor: "#ffffff14" }]} />}
 
             <View style={styles.brandRow}>
               <Image
                 source={LOGO}
-                style={[styles.logo, { tintColor: colors.primary }]}
+                style={[
+                  styles.logo,
+                  { tintColor: colors.primary },
+                  isTransparentMode && styles.transparentLogo
+                ]}
                 resizeMode="contain"
               />
-              <Text style={styles.brand}>TARKEEZ</Text>
+              {!isTransparentMode && <Text style={styles.brand}>TARKEEZ</Text>}
             </View>
           </View>
+        </View>
+
+        <View style={styles.modeToggleRow}>
+          <Text style={styles.modeToggleText}>Transparent Background</Text>
+          <Switch
+            value={isTransparentMode}
+            onValueChange={setIsTransparentMode}
+            trackColor={{ false: "#3e3e3e", true: colors.primary }}
+            thumbColor="#ffffff"
+          />
         </View>
 
         <View style={styles.actions}>
@@ -218,13 +242,13 @@ export function SharePostModal({
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, isTransparentMode }: { value: string; label: string; isTransparentMode?: boolean }) {
   return (
     <View style={styles.statBlock}>
-      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+      <Text style={[styles.statValue, isTransparentMode && styles.textShadow]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statLabel, isTransparentMode && styles.textShadow]}>{label}</Text>
     </View>
   );
 }
@@ -304,11 +328,34 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
   },
+  transparentLogo: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+  },
   brand: {
     fontFamily: "Inter_700Bold",
     fontSize: 32,
     color: "#ffffff",
     letterSpacing: -0.6,
+  },
+  modeToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  modeToggleText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 15,
+    color: "#ffffff",
+  },
+  textShadow: {
+    textShadowColor: "rgba(0, 0, 0, 0.8)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   actions: {
     flexDirection: "row",

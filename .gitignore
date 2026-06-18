@@ -40,3 +40,15 @@ yarn-error.*
 .vercel
 
 .env
+
+# Offline Database Architecture & Tests Docs (Kept private)
+OFFLINE_DB_TESTS_REPORT.md
+OFFLINE_ARCHITECTURE_PLAN.md
+CLAUDE.md
+
+# Local SQLite Databases & Caches
+tarkeez.db
+tarkeez.db-journal
+tarkeez.db-wal
+tarkeez.db-shm
+*.db

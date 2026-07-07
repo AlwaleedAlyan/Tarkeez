@@ -3,6 +3,7 @@ const { getDefaultConfig } = require("expo/metro-config");
 const config = getDefaultConfig(__dirname);
 
 config.resolver.sourceExts.push("sql");
+config.resolver.assetExts.push("wasm");
 
 // SharedArrayBuffer (required by expo-sqlite's WASM web build) is only
 // exposed by browsers when the page is served with these two headers.

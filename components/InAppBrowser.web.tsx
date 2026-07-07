@@ -1,11 +1,23 @@
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Tappable } from "@/components/Tappable";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BrowserFocusTimer } from "@/components/BrowserFocusTimer";
+import { Tappable } from "@/components/Tappable";
+import { useLibrary } from "@/contexts/LibraryContext";
+import {
+  classifyUrl,
+  extractDomain,
+} from "@/features/classifier/urlClassifier";
 import { useColors } from "@/hooks/useColors";
 import { safeHost } from "@/lib/normalizeUrl";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = { url: string; title?: string };
 
@@ -13,11 +25,100 @@ export function InAppBrowserWeb({ url, title }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { recordSession } = useLibrary();
 
   const [loading, setLoading] = useState(true);
+  const [focusSec, setFocusSec] = useState(0);
+  const [isEducational, setIsEducational] = useState<boolean | null>(null);
+  const [isVisible, setIsVisible] = useState(!document.hidden);
 
   const host = useMemo(() => safeHost(url), [url]);
   const displayTitle = title || host;
+
+  const startedAtRef = useRef<number>(Date.now());
+  const focusSecRef = useRef(0);
+  const lastEducationalUrlRef = useRef<string | null>(null);
+  const savedRef = useRef(false);
+
+  useEffect(() => {
+    focusSecRef.current = focusSec;
+  }, [focusSec]);
+
+  // Track page visibility: pause the timer when the tab/app is hidden.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  // Classify the URL once on mount. Cross-origin iframes cannot be inspected,
+  // so we classify the top-level URL and treat the whole visible session as
+  // focused study time when the URL is educational.
+  useEffect(() => {
+    const domain = extractDomain(url);
+    if (!domain) {
+      setIsEducational(true);
+      return;
+    }
+    setIsEducational(null);
+    classifyUrl(url)
+      .then((verdict) => {
+        setIsEducational(verdict.isEducational);
+        if (verdict.isEducational) {
+          lastEducationalUrlRef.current = url;
+        }
+      })
+      .catch(() => {
+        // Classifier is fail-open by design.
+        setIsEducational(true);
+      });
+  }, [url]);
+
+  // Run the focus timer while the URL is educational and the page is visible.
+  const running = isEducational !== false && isVisible;
+  const runningRef = useRef(running);
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (runningRef.current) {
+        setFocusSec((s) => s + 1);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Persist the browser study session on unmount, mirroring the native browser view.
+  useEffect(() => {
+    return () => {
+      if (savedRef.current) return;
+      const durationSec = focusSecRef.current;
+      if (durationSec < 5) return;
+      const fallbackDomain = url ? extractDomain(url) : null;
+      const externalUrl = lastEducationalUrlRef.current ?? fallbackDomain;
+      if (!externalUrl) return;
+      savedRef.current = true;
+      void recordSession({
+        materialId: null,
+        noteId: null,
+        externalUrl,
+        startedAt: startedAtRef.current,
+        endedAt: Date.now(),
+        durationSec,
+        pausedSec: 0,
+      });
+    };
+  }, [recordSession, url]);
+
+  const handleLoad = useCallback(() => {
+    setLoading(false);
+  }, []);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -45,6 +146,7 @@ export function InAppBrowserWeb({ url, title }: Props) {
             {host}
           </Text>
         </View>
+        <BrowserFocusTimer focusSec={focusSec} running={running} />
         <Tappable
           onPress={() => router.back()}
           hitSlop={8}
@@ -72,7 +174,7 @@ export function InAppBrowserWeb({ url, title }: Props) {
           src={url}
           title={displayTitle}
           style={{ border: 0, width: "100%", height: "100%" }}
-          onLoad={() => setLoading(false)}
+          onLoad={handleLoad}
         />
       </View>
     </View>

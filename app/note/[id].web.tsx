@@ -39,6 +39,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
 const AUTOSAVE_DELAY_MS = 600;
+const INACTIVITY_DRAW_MS = 30_000;
+const INACTIVITY_TEXT_MS = 45_000;
 const MIN_SESSION_SEC = 5;
 
 type Mode = "text" | "draw";
@@ -50,6 +52,15 @@ function stripHtml(s: string) {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+function fmtClock(totalSec: number) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
 }
 
 function countWords(html: string) {
@@ -106,13 +117,24 @@ export default function NoteScreenWeb() {
   const finalizedRef = useRef(false);
   const initialWordsRef = useRef(0);
   const initialStrokesCountRef = useRef(0);
+  const lastActivityRef = useRef<number>(Date.now());
+
+  const [seconds, setSeconds] = useState(0);
+  const [pausedSec, setPausedSec] = useState(0);
+  const [paused, setPaused] = useState(false);
 
   const titleRef = useRef("");
   const contentRef = useRef("");
   const strokesCountRef = useRef(0);
+  const secondsRef = useRef(0);
+  const pausedSecRef = useRef(0);
+  const modeRef = useRef<Mode>(mode);
   titleRef.current = title;
   contentRef.current = content;
   strokesCountRef.current = strokes.length;
+  secondsRef.current = seconds;
+  pausedSecRef.current = pausedSec;
+  modeRef.current = mode;
 
   useEffect(() => {
     if (!note || initializedRef.current) return;
@@ -177,22 +199,52 @@ export default function NoteScreenWeb() {
     };
   }, []);
 
+  // 1 s ticker — count seconds in either focus or paused buckets.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (paused) setPausedSec((v) => v + 1);
+      else setSeconds((v) => v + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [paused]);
+
+  // 5 s inactivity poll — pause if idle longer than the per-mode threshold.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const idle = Date.now() - lastActivityRef.current;
+      const threshold =
+        modeRef.current === "draw" ? INACTIVITY_DRAW_MS : INACTIVITY_TEXT_MS;
+      if (idle >= threshold) {
+        setPaused((p) => (p ? p : true));
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const bumpActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    setPaused((p) => (p ? false : p));
+  }, []);
+
   const onChangeTitle = (next: string) => {
+    bumpActivity();
     setTitle(next);
     if (!initializedRef.current) return;
     scheduleTextSave({ title: next });
   };
 
   const onEditorInput = useCallback(() => {
+    bumpActivity();
     if (!editorRef.current) return;
     const html = editorRef.current.innerHTML;
     setContent(html);
     if (!initializedRef.current) return;
     scheduleTextSave({ contentHtml: html });
-  }, [scheduleTextSave]);
+  }, [scheduleTextSave, bumpActivity]);
 
   const applyEditorAction = useCallback(
     (action: string, value?: string) => {
+      bumpActivity();
       if (!editorRef.current) return;
       editorRef.current.focus();
       try {
@@ -202,11 +254,12 @@ export default function NoteScreenWeb() {
       }
       onEditorInput();
     },
-    [onEditorInput],
+    [onEditorInput, bumpActivity],
   );
 
   const onStrokesChange = useCallback(
     (next: Stroke[]) => {
+      bumpActivity();
       setStrokes(next);
       bumpHistory();
       if (!id) return;
@@ -214,20 +267,19 @@ export default function NoteScreenWeb() {
         /* keep local copy */
       });
     },
-    [id, saveNoteStrokes, bumpHistory],
+    [id, saveNoteStrokes, bumpHistory, bumpActivity],
   );
 
   const switchMode = useCallback((next: Mode) => {
     setMode(next);
-  }, []);
+    bumpActivity();
+  }, [bumpActivity]);
 
   const finalize = useCallback(() => {
     if (finalizedRef.current) return;
     finalizedRef.current = true;
     if (!id) return;
-    const durationSec = Math.round(
-      (Date.now() - sessionStartRef.current) / 1000,
-    );
+    const durationSec = secondsRef.current;
     if (durationSec < MIN_SESSION_SEC) return;
     const wordsAdded = Math.max(
       0,
@@ -243,7 +295,7 @@ export default function NoteScreenWeb() {
       startedAt: sessionStartRef.current,
       endedAt: Date.now(),
       durationSec,
-      pausedSec: 0,
+      pausedSec: pausedSecRef.current,
       wordsAdded,
       strokesAdded,
     }).catch(() => {
@@ -383,6 +435,38 @@ export default function NoteScreenWeb() {
             colors={colors}
           />
         </View>
+
+        {paused ? (
+          <View
+            style={[
+              styles.timerPill,
+              { backgroundColor: colors.secondary, borderColor: colors.border },
+            ]}
+          >
+            <Feather name="moon" size={12} color={colors.mutedForeground} />
+            <Text
+              style={[styles.timerPillText, { color: colors.mutedForeground }]}
+            >
+              Paused
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.timerPill,
+              { backgroundColor: colors.secondary, borderColor: colors.border },
+            ]}
+          >
+            <View
+              style={[styles.timerDot, { backgroundColor: colors.accent }]}
+            />
+            <Text
+              style={[styles.timerPillText, { color: colors.foreground }]}
+            >
+              {fmtClock(seconds)}
+            </Text>
+          </View>
+        )}
 
         <Tappable
           onPress={onDelete}
@@ -705,6 +789,25 @@ const styles = StyleSheet.create({
   modeSegText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
+  },
+  timerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  timerPillText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+  },
+  timerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   titleRow: {
     flexDirection: "row",

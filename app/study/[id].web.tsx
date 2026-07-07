@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -16,6 +16,15 @@ import { fileUrl } from "@/lib/api";
 
 const MIN_SESSION_SEC = 5;
 
+function fmtClock(totalSec: number) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+
 export default function StudyScreenWeb() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -26,26 +35,41 @@ export default function StudyScreenWeb() {
 
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [seconds, setSeconds] = useState(0);
+  const [pausedSec, setPausedSec] = useState(0);
+  const [isRunning, setIsRunning] = useState(true);
 
   const topPad = Math.max(insets.top, 12);
 
   const sessionStartRef = useRef<number>(Date.now());
   const finalizedRef = useRef(false);
-  const pausedMsRef = useRef(0);
   const hiddenSinceRef = useRef<number | null>(null);
   const materialIdRef = useRef<string | null>(null);
-  materialIdRef.current = material?.id ?? null;
+  const secondsRef = useRef(0);
+  const pausedSecRef = useRef(0);
+  const isRunningRef = useRef(true);
 
+  materialIdRef.current = material?.id ?? null;
+  secondsRef.current = seconds;
+  pausedSecRef.current = pausedSec;
+  isRunningRef.current = isRunning;
+
+  // Pause/resume when the browser tab is hidden or shown.
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVisibilityChange = () => {
       if (document.hidden) {
+        setIsRunning(false);
         if (hiddenSinceRef.current == null) {
           hiddenSinceRef.current = Date.now();
         }
-      } else if (hiddenSinceRef.current != null) {
-        pausedMsRef.current += Date.now() - hiddenSinceRef.current;
-        hiddenSinceRef.current = null;
+      } else {
+        setIsRunning(true);
+        if (hiddenSinceRef.current != null) {
+          const deltaMs = Date.now() - hiddenSinceRef.current;
+          hiddenSinceRef.current = null;
+          setPausedSec((p) => p + Math.round(deltaMs / 1000));
+        }
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -54,28 +78,62 @@ export default function StudyScreenWeb() {
     };
   }, []);
 
+  // One-second ticker: count focus seconds while running, paused seconds otherwise.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (isRunningRef.current) {
+        setSeconds((s) => s + 1);
+      } else {
+        setPausedSec((p) => p + 1);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const focusPct = useMemo(() => {
+    const wall = seconds + pausedSec;
+    if (wall === 0) return 100;
+    return Math.round((seconds / wall) * 100);
+  }, [seconds, pausedSec]);
+
+  const status = useMemo(() => {
+    if (!isRunning) {
+      return {
+        text: "Paused",
+        color: colors.mutedForeground,
+      };
+    }
+    return {
+      text: "Reading",
+      color: "#5fb37b",
+    };
+  }, [isRunning, colors]);
+
   const finalize = useCallback(() => {
     if (finalizedRef.current) return;
     finalizedRef.current = true;
     const materialId = materialIdRef.current;
     if (!materialId) return;
+
     const endedAt = Date.now();
+    // Account for time spent hidden while the unmount is happening.
     if (hiddenSinceRef.current != null) {
-      pausedMsRef.current += endedAt - hiddenSinceRef.current;
+      const deltaMs = endedAt - hiddenSinceRef.current;
       hiddenSinceRef.current = null;
+      pausedSecRef.current += Math.round(deltaMs / 1000);
     }
-    const startedAt = sessionStartRef.current;
-    const activeMs = Math.max(0, endedAt - startedAt - pausedMsRef.current);
-    const durationSec = Math.round(activeMs / 1000);
+
+    const durationSec = secondsRef.current;
+    const paused = pausedSecRef.current;
     if (durationSec < MIN_SESSION_SEC) return;
-    const pausedSec = Math.round(pausedMsRef.current / 1000);
+
     recordSession({
       materialId,
       noteId: null,
-      startedAt,
+      startedAt: sessionStartRef.current,
       endedAt,
       durationSec,
-      pausedSec,
+      pausedSec: paused,
       pagesRead: 0,
       pageTimes: {},
       selections: 0,
@@ -84,9 +142,7 @@ export default function StudyScreenWeb() {
     });
   }, [recordSession]);
 
-  // Ref-stable cleanup: re-memoizing `finalize` must not trip the
-  // cleanup, or `finalizedRef.current` flips to true while the user is
-  // still on the screen, and the real unmount no-ops.
+  // Ref-stable cleanup: re-memoizing `finalize` must not trip the cleanup.
   const finalizeRef = useRef(finalize);
   finalizeRef.current = finalize;
   useEffect(() => () => finalizeRef.current(), []);
@@ -113,7 +169,16 @@ export default function StudyScreenWeb() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topPad + 8 }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: topPad + 8,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
         <Tappable
           onPress={() => router.back()}
           hitSlop={10}
@@ -128,12 +193,33 @@ export default function StudyScreenWeb() {
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
         </Tappable>
-        <Text
-          numberOfLines={1}
-          style={[styles.title, { color: colors.foreground }]}
-        >
-          {material?.title ?? "Material"}
-        </Text>
+
+        <View style={styles.headerCenter}>
+          <Text
+            numberOfLines={1}
+            style={[styles.title, { color: colors.foreground }]}
+          >
+            {material?.title ?? "Material"}
+          </Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: status.color }]} />
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+              {status.text}
+            </Text>
+            <Text style={[styles.sep, { color: colors.mutedForeground }]}>
+              ·
+            </Text>
+            <Text style={[styles.clock, { color: colors.foreground }]}>
+              {fmtClock(seconds)}
+            </Text>
+            <Text style={[styles.sep, { color: colors.mutedForeground }]}>
+              ·
+            </Text>
+            <Text style={[styles.pct, { color: colors.mutedForeground }]}>
+              {focusPct}%
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -195,8 +281,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 10,
     gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: {
     width: 36,
@@ -205,10 +292,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
+  headerCenter: {
     flex: 1,
+    minWidth: 0,
+  },
+  title: {
+    fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    fontWeight: "600",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  sep: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  clock: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+  },
+  pct: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
   },
   body: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },

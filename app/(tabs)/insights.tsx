@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +20,7 @@ import { StrokeThumbnail } from "@/components/StrokeThumbnail";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { safeHost } from "@/lib/normalizeUrl";
 
 type Metric = "pages" | "words";
@@ -54,8 +57,10 @@ const DAYS_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function InsightsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { sessions, materials, notes } = useLibrary();
+  const router = useRouter();
+  const { sessions, materials, notes, refreshAll } = useLibrary();
   const { user } = useAuth();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -195,6 +200,13 @@ export default function InsightsScreen() {
           paddingHorizontal: 20,
           gap: 24,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
@@ -205,6 +217,20 @@ export default function InsightsScreen() {
               Your focus
             </Text>
           </View>
+          <Tappable
+            onPress={() => router.push("/calendar")}
+            accessibilityLabel="Open study calendar"
+            style={({ pressed }) => [
+              styles.calendarBtn,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Feather name="calendar" size={18} color={colors.foreground} />
+          </Tappable>
           <Tappable
             onPress={() => setShareOpen(true)}
             accessibilityLabel="Create a post"
@@ -368,58 +394,66 @@ export default function InsightsScreen() {
           </View>
         </View>
 
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.border },
+        <Tappable
+          onPress={() => router.push("/calendar")}
+          accessibilityLabel="Open study calendar"
+          style={({ pressed }) => [
+            { opacity: pressed ? 0.85 : 1 },
           ]}
         >
-          <View style={styles.cardHead}>
-            <Text style={[styles.cardTitle, { color: colors.foreground }]}>
-              Last 7 days
-            </Text>
-            <Text style={[styles.cardMeta, { color: colors.mutedForeground }]}>
-              {stats.sessionsCount} sessions
-            </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.cardHead}>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>
+                Last 7 days
+              </Text>
+              <Text style={[styles.cardMeta, { color: colors.mutedForeground }]}>
+                {stats.sessionsCount} sessions
+              </Text>
+            </View>
+            <View style={styles.barChart}>
+              {stats.dayBuckets.map((sec, i) => {
+                const h = Math.max(8, (sec / stats.maxBucket) * 110);
+                const isToday = i === 6;
+                return (
+                  <View key={i} style={styles.barCol}>
+                    <View
+                      style={[
+                        styles.bar,
+                        {
+                          height: h,
+                          backgroundColor:
+                            sec === 0
+                              ? colors.muted
+                              : isToday
+                                ? colors.accent
+                                : colors.primary,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.dayLabel,
+                        {
+                          color: isToday ? colors.foreground : colors.mutedForeground,
+                          fontFamily: isToday
+                            ? "Inter_600SemiBold"
+                            : "Inter_500Medium",
+                        },
+                      ]}
+                    >
+                      {dayLabels[i]}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
-          <View style={styles.barChart}>
-            {stats.dayBuckets.map((sec, i) => {
-              const h = Math.max(8, (sec / stats.maxBucket) * 110);
-              const isToday = i === 6;
-              return (
-                <View key={i} style={styles.barCol}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: h,
-                        backgroundColor:
-                          sec === 0
-                            ? colors.muted
-                            : isToday
-                              ? colors.accent
-                              : colors.primary,
-                      },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.dayLabel,
-                      {
-                        color: isToday ? colors.foreground : colors.mutedForeground,
-                        fontFamily: isToday
-                          ? "Inter_600SemiBold"
-                          : "Inter_500Medium",
-                      },
-                    ]}
-                  >
-                    {dayLabels[i]}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+        </Tappable>
 
         <View style={{ gap: 12 }}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -557,6 +591,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 12,
+  },
+  calendarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   postBtn: {
     flexDirection: "row",

@@ -8,6 +8,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -34,6 +35,7 @@ import {
   type Note,
 } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { MAX_MATERIAL_BYTES } from "@/lib/api";
 
 type LibraryItem =
@@ -58,7 +60,9 @@ export default function LibraryScreen() {
     updateCollection,
     createNote,
     deleteNote,
+    refreshAll,
   } = useLibrary();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
   const [importing, setImporting] = useState(false);
   const [creatingNote, setCreatingNote] = useState(false);
   const [nameModalOpen, setNameModalOpen] = useState(false);
@@ -282,8 +286,15 @@ export default function LibraryScreen() {
         keyExtractor={(item) =>
           item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
         }
-        scrollEnabled={!showEmptyState}
+        scrollEnabled
         keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
         itemLayoutAnimation={LinearTransition.springify()
           .damping(22)
           .stiffness(180)}

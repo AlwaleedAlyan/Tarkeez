@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import {
   Alert,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +18,7 @@ import { Button } from "@/components/Button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
 function fmtDuration(totalSec: number) {
   const h = Math.floor(totalSec / 3600);
@@ -30,7 +32,8 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { sessions, materials } = useLibrary();
+  const { sessions, materials, refreshAll } = useLibrary();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -91,6 +94,13 @@ export default function ProfileScreen() {
           paddingHorizontal: 20,
           gap: 20,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View
           style={[

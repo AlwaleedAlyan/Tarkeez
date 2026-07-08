@@ -301,6 +301,7 @@ type LibraryContextType = {
   refreshMaterials: () => Promise<void>;
   refreshCollections: () => Promise<void>;
   refreshNotes: () => Promise<void>;
+  refreshAll: () => Promise<void>;
   createCollection: (name: string) => Promise<Collection>;
   updateCollection: (id: string, name: string) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
@@ -590,79 +591,93 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   // After initial hydrate, fetch sessions from DB and reconcile with the local
   // cache. DB rows are authoritative; any local session with `pendingSync` is
   // retried in the background.
+  const refreshSessions = useCallback(async () => {
+    if (!user) return;
+    const res = await api<{ sessions: ApiSession[] }>("/sessions");
+    const dbSessions = res.sessions.map(sessionFromApi);
+    // !db (Safari/Firefox fallback) keeps React state + AsyncStorage in sync
+    // since useLiveSessions returns []. When SQLite is available, the post-
+    // API upsert below feeds the live query and we skip the legacy mirror.
+    if (!db) {
+      setWebSessions((prev) => {
+        const dbIds = new Set(dbSessions.map((s) => s.id));
+        const pending = prev.filter(
+          (s) => s.pendingSync && !dbIds.has(s.id),
+        );
+        const merged = [...dbSessions, ...pending].sort(
+          (a, b) => b.startedAt - a.startedAt,
+        );
+        AsyncStorage.setItem(
+          sessionsKey(user.id),
+          JSON.stringify(merged),
+        ).catch(() => {});
+        return merged;
+      });
+    }
+    try {
+      await upsertSessionsFromServer(
+        dbSessions
+          .filter(
+            (s) =>
+              (s.materialId != null ? 1 : 0) +
+                (s.noteId != null ? 1 : 0) +
+                (s.externalUrl != null ? 1 : 0) ===
+              1,
+          )
+          .map((s) => ({
+            id: s.id,
+            userId: user.id,
+            materialId: s.materialId,
+            noteId: s.noteId,
+            externalUrl: s.externalUrl ?? null,
+            startedAt: s.startedAt,
+            endedAt: s.endedAt,
+            durationSec: s.durationSec,
+            pausedSec: s.pausedSec ?? 0,
+            pagesRead: s.pagesRead ?? null,
+            pageTimes: s.pageTimes ?? null,
+            selections: s.selections ?? null,
+            wordsAdded: s.wordsAdded ?? null,
+            strokesAdded: s.strokesAdded ?? null,
+            createdAt: s.endedAt,
+            pendingSync: false,
+          })),
+      );
+    } catch (err) {
+      console.warn("[db] sessions dual-write failed", err);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      let dbSessions: Session[] = [];
-      try {
-        const res = await api<{ sessions: ApiSession[] }>("/sessions");
-        dbSessions = res.sessions.map(sessionFromApi);
-      } catch {
-        return; // offline — keep local cache
-      }
       if (cancelled) return;
-      // !db (Safari/Firefox fallback) keeps React state + AsyncStorage in sync
-      // since useLiveSessions returns []. When SQLite is available, the post-
-      // API upsert below feeds the live query and we skip the legacy mirror.
-      if (!db) {
-        setWebSessions((prev) => {
-          const dbIds = new Set(dbSessions.map((s) => s.id));
-          const pending = prev.filter(
-            (s) => s.pendingSync && !dbIds.has(s.id),
-          );
-          const merged = [...dbSessions, ...pending].sort(
-            (a, b) => b.startedAt - a.startedAt,
-          );
-          AsyncStorage.setItem(
-            sessionsKey(user.id),
-            JSON.stringify(merged),
-          ).catch(() => {});
-          return merged;
-        });
-      }
       try {
-        await upsertSessionsFromServer(
-          dbSessions
-            .filter(
-              (s) =>
-                (s.materialId != null ? 1 : 0) +
-                  (s.noteId != null ? 1 : 0) +
-                  (s.externalUrl != null ? 1 : 0) ===
-                1,
-            )
-            .map((s) => ({
-              id: s.id,
-              userId: user.id,
-              materialId: s.materialId,
-              noteId: s.noteId,
-              externalUrl: s.externalUrl ?? null,
-              startedAt: s.startedAt,
-              endedAt: s.endedAt,
-              durationSec: s.durationSec,
-              pausedSec: s.pausedSec ?? 0,
-              pagesRead: s.pagesRead ?? null,
-              pageTimes: s.pageTimes ?? null,
-              selections: s.selections ?? null,
-              wordsAdded: s.wordsAdded ?? null,
-              strokesAdded: s.strokesAdded ?? null,
-              createdAt: s.endedAt,
-              pendingSync: false,
-            })),
-        );
-      } catch (err) {
-        console.warn("[db] sessions dual-write failed", err);
+        await refreshSessions();
+      } catch {
+        // offline — keep local cache
       }
-      // Retry pending in background.
-      const stillPending = dbSessions.length
-        ? []
-        : []; // computed below from current state asynchronously
-      void stillPending;
     })();
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, refreshSessions]);
+
+  const refreshAll = useCallback(async () => {
+    const results = await Promise.allSettled([
+      refreshMaterials(),
+      refreshCollections(),
+      refreshNotes(),
+      refreshSessions(),
+    ]);
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+    if (failures.length > 0) {
+      throw failures[0].reason;
+    }
+  }, [refreshMaterials, refreshCollections, refreshNotes, refreshSessions]);
 
   // Periodic pull: on app foreground, network reconnect, and a 60s
   // heartbeat. The LWW guard inside `upsertXFromServer` protects local
@@ -1767,6 +1782,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       refreshMaterials,
       refreshCollections,
       refreshNotes,
+      refreshAll,
       createCollection,
       updateCollection,
       deleteCollection,
@@ -1806,6 +1822,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       refreshMaterials,
       refreshCollections,
       refreshNotes,
+      refreshAll,
       createCollection,
       updateCollection,
       deleteCollection,

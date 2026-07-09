@@ -21,6 +21,7 @@ const TOKENS = {
   accentLight: "#9dd49d",
   textMuted: "#6a7a6a",
   streakGold: "#ffaa44",
+  cellBg: "#1e241e",
 };
 
 interface CalendarCellProps {
@@ -29,7 +30,7 @@ interface CalendarCellProps {
   monthMaxMinutes: number;
   isSelected: boolean;
   isStreak: boolean;
-  showDuration: boolean;
+  variant?: "heatmap" | "calendar";
   onSelect: (date: Date) => void;
 }
 
@@ -39,7 +40,7 @@ export default function CalendarCell({
   monthMaxMinutes,
   isSelected,
   isStreak,
-  showDuration,
+  variant = "heatmap",
   onSelect,
 }: CalendarCellProps) {
   const reducedMotion = useReducedMotion();
@@ -50,7 +51,7 @@ export default function CalendarCell({
 
   const colors = getHeatColor(minutes, monthMaxMinutes);
   const hasData = minutes > 0;
-  const displayDuration = showDuration && hasData ? formatDuration(minutes) : "";
+  const isCalendar = variant === "calendar";
 
   const handleLayout = (e: LayoutChangeEvent) => {
     setLayout(e.nativeEvent.layout);
@@ -76,14 +77,24 @@ export default function CalendarCell({
     hasData ? formatDuration(minutes) + " studied" : "no study session"
   }`;
 
+  const baseCellStyle = isCalendar
+    ? (styles.cellCalendar as any)
+    : (styles.cellHeatmap as any);
+  const baseDayStyle = isCalendar
+    ? (styles.dayNumberCalendar as any)
+    : (styles.dayNumberHeatmap as any);
+
   return (
     <View style={styles.wrapper as any} onLayout={handleLayout}>
       <Tappable
         onPress={() => onSelect(day.date)}
         style={({ pressed }) => [
           styles.cell as any,
+          baseCellStyle,
           {
-            backgroundColor: colors.bg,
+            backgroundColor: isCalendar
+              ? TOKENS.cellBg
+              : colors.bg,
             opacity: day.isCurrentMonth ? 1 : 0.3,
             borderWidth:
               isSelected || day.isToday || hover || pressed ? 2 : 0,
@@ -107,24 +118,31 @@ export default function CalendarCell({
         accessibilityRole="button"
         accessibilityState={{ selected: isSelected }}
       >
-        <Text style={[styles.dayNumber as any, { color: colors.text }]}>
+        <Text
+          style={[
+            baseDayStyle,
+            { color: isCalendar ? "#ffffff" : colors.text },
+          ]}
+        >
           {day.day}
         </Text>
-        {displayDuration ? (
-          <Text style={[styles.duration as any, { color: colors.text }]}>
-            {displayDuration}
-          </Text>
-        ) : null}
-        {hasData ? (
+        {isCalendar && hasData ? (
           <View
             style={[
-              styles.dot as any,
-              { backgroundColor: colors.text },
+              styles.heatSquare as any,
+              { backgroundColor: colors.bg },
             ]}
           />
         ) : null}
         {isStreak && hasData ? (
-          <Text style={styles.streakBadge as any}>🔥</Text>
+          <Text
+            style={[
+              styles.streakBadge as any,
+              isCalendar && (styles.streakBadgeCalendar as any),
+            ]}
+          >
+            🔥
+          </Text>
         ) : null}
       </Tappable>
 
@@ -159,9 +177,8 @@ const styles = StyleSheet.create({
   cell: {
     flex: 1,
     borderRadius: 4,
-    padding: 6,
-    justifyContent: "space-between",
-    alignItems: "center",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
     position: "relative",
     overflow: "hidden",
     transition: "transform 0.15s ease, border-color 0.15s ease, background-color 0.2s ease",
@@ -171,25 +188,38 @@ const styles = StyleSheet.create({
       zIndex: 2,
     },
   },
-  dayNumber: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
-    lineHeight: 18,
+  cellHeatmap: {
+    padding: 2,
   },
-  duration: {
-    fontFamily: "Inter_500Medium",
+  cellCalendar: {
+    padding: 6,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  dayNumberHeatmap: {
+    fontFamily: "Inter_600SemiBold",
     fontSize: 10,
     lineHeight: 12,
   },
-  dot: {
-    position: "absolute",
-    bottom: 6,
-    width: 4,
-    height: 4,
+  dayNumberCalendar: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    lineHeight: 18,
+    alignSelf: "flex-start",
+  },
+  heatSquare: {
+    width: 12,
+    height: 12,
     borderRadius: 2,
+    alignSelf: "center",
   },
   streakBadge: {
     position: "absolute",
+    top: 2,
+    right: 2,
+    fontSize: 7,
+  },
+  streakBadgeCalendar: {
     top: 4,
     right: 4,
     fontSize: 9,

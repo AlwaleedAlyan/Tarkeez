@@ -26,7 +26,7 @@ interface CalendarGridProps {
   studyData: StudyData;
   selectedDate: Date;
   streakDays: Set<string>;
-  showDuration: boolean;
+  variant?: "heatmap" | "calendar";
   onSelectDate: (date: Date) => void;
   switching?: boolean;
 }
@@ -36,10 +36,11 @@ export default function CalendarGrid({
   studyData,
   selectedDate,
   streakDays,
-  showDuration,
+  variant = "heatmap",
   onSelectDate,
   switching = false,
 }: CalendarGridProps) {
+  const isCalendar = variant === "calendar";
   const days = getMonthData(
     currentMonth.getFullYear(),
     currentMonth.getMonth(),
@@ -73,10 +74,16 @@ export default function CalendarGrid({
   };
 
   return (
-    <View style={styles.card as any}>
+    <View style={[styles.card as any, isCalendar && (styles.cardCalendar as any)]}>
       <View style={styles.weekdayHeader as any}>
         {WEEKDAYS.map((w) => (
-          <Text key={w} style={styles.weekdayLabel as any}>
+          <Text
+            key={w}
+            style={[
+              styles.weekdayLabel as any,
+              isCalendar && (styles.weekdayLabelCalendar as any),
+            ]}
+          >
             {w}
           </Text>
         ))}
@@ -85,6 +92,7 @@ export default function CalendarGrid({
       <View
         style={[
           styles.grid as any,
+          isCalendar && (styles.gridCalendar as any),
           switching && Platform.OS === "web" ? { opacity: 0 } : { opacity: 1 },
         ]}
       >
@@ -110,7 +118,7 @@ export default function CalendarGrid({
                 monthMaxMinutes={monthMaxMinutes}
                 isSelected={isSelected}
                 isStreak={isStreak}
-                showDuration={showDuration}
+                variant={variant}
                 onSelect={onSelectDate}
               />
             </View>
@@ -143,8 +151,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: TOKENS.border,
-    padding: 16,
-    gap: 12,
+    padding: 8,
+    gap: 8,
+  },
+  cardCalendar: {
+    padding: 12,
+    gap: 10,
   },
   weekdayHeader: {
     flexDirection: "row",
@@ -154,18 +166,24 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontFamily: "Inter_500Medium",
-    fontSize: 10,
+    fontSize: 8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     color: TOKENS.textMuted,
   },
+  weekdayLabelCalendar: {
+    fontSize: 10,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: 2,
     display: "grid",
     gridTemplateColumns: "repeat(7, 1fr)",
     transition: "opacity 0.3s ease",
+  },
+  gridCalendar: {
+    gap: 4,
   },
   legend: {
     flexDirection: "row",
@@ -176,7 +194,7 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontFamily: "Inter_500Medium",
-    fontSize: 10,
+    fontSize: 8,
     color: TOKENS.textMuted,
   },
   legendBoxes: {
@@ -184,8 +202,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   legendBox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 2,
   },
 } as any);

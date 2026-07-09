@@ -176,7 +176,7 @@ export default function StudyCalendar({
             studyData={studyData}
             selectedDate={selectedDate}
             streakDays={streakDays}
-            showDuration={!isMobile}
+            variant={isMobile ? "calendar" : "heatmap"}
             onSelectDate={handleSelectDate}
             switching={switching}
           />

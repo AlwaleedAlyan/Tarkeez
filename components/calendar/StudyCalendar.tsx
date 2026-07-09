@@ -17,6 +17,7 @@ import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   computeMonthlyStats,
   dateKey,
+  formatDurationAverage,
   formatDurationHours,
   formatDurationShort,
   getMonthData,
@@ -148,7 +149,7 @@ export default function StudyCalendar({
 
       <StatsRow
         totalHours={formatDurationHours(stats.totalMinutes)}
-        dailyAverage={formatDurationShort(stats.dailyAverageMinutes)}
+        dailyAverage={formatDurationAverage(stats.dailyAverageMinutes)}
         streak={stats.currentStreak}
         bestDay={formatDurationShort(stats.bestDayMinutes)}
         compact={isMobile}

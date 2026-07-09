@@ -4,19 +4,14 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 import CalendarCell from "./CalendarCell";
 import {
   dateKey,
+  getHeatColorForRatio,
   getMonthData,
+  getMonthMaxMinutes,
   type StudyData,
   type CalendarDay,
 } from "@/lib/calendarUtils";
 
-const HEAT_COLORS = [
-  "#1e241e",
-  "#233023",
-  "#304430",
-  "#415f41",
-  "#557d55",
-  "#699b69",
-];
+const LEGEND_RATIOS = [0, 0.2, 0.4, 0.6, 0.8, 1];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -46,6 +41,11 @@ export default function CalendarGrid({
   switching = false,
 }: CalendarGridProps) {
   const days = getMonthData(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth(),
+  );
+  const monthMaxMinutes = getMonthMaxMinutes(
+    studyData,
     currentMonth.getFullYear(),
     currentMonth.getMonth(),
   );
@@ -107,6 +107,7 @@ export default function CalendarGrid({
               <CalendarCell
                 day={day}
                 minutes={minutes}
+                monthMaxMinutes={monthMaxMinutes}
                 isSelected={isSelected}
                 isStreak={isStreak}
                 showDuration={showDuration}
@@ -120,10 +121,13 @@ export default function CalendarGrid({
       <View style={styles.legend as any}>
         <Text style={styles.legendLabel as any}>Less</Text>
         <View style={styles.legendBoxes as any}>
-          {HEAT_COLORS.map((color, i) => (
+          {LEGEND_RATIOS.map((ratio, i) => (
             <View
               key={i}
-              style={[styles.legendBox as any, { backgroundColor: color }]}
+              style={[
+                styles.legendBox as any,
+                { backgroundColor: getHeatColorForRatio(ratio) },
+              ]}
             />
           ))}
         </View>

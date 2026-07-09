@@ -5,6 +5,7 @@ module.exports = {
   testMatch: [
     '**/db/__tests__/**/*.test.ts',
     '**/features/**/__tests__/**/*.test.ts',
+    '**/lib/__tests__/**/*.test.ts',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',

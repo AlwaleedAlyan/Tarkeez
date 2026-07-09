@@ -38,6 +38,68 @@ export function getHeatLevel(minutes: number): number {
   return 5;
 }
 
+const HEAT_BASE = "#1e241e";
+const HEAT_BRIGHT = "#699b69";
+const HEAT_TEXT_DARK = "#111611";
+const HEAT_TEXT_LIGHT = "#ffffff";
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255,
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(Math.round(r))}${toHex(Math.round(g))}${toHex(Math.round(b))}`;
+}
+
+function interpolateColor(a: string, b: string, t: number): string {
+  const start = hexToRgb(a);
+  const end = hexToRgb(b);
+  const r = start.r + (end.r - start.r) * t;
+  const g = start.g + (end.g - start.g) * t;
+  const b2 = start.b + (end.b - start.b) * t;
+  return rgbToHex(r, g, b2);
+}
+
+export function getHeatColorForRatio(ratio: number): string {
+  const t = Math.min(Math.max(ratio, 0), 1);
+  return interpolateColor(HEAT_BASE, HEAT_BRIGHT, t);
+}
+
+export function getHeatColor(
+  minutes: number,
+  maxMinutes: number,
+): { bg: string; text: string } {
+  if (maxMinutes <= 0 || minutes <= 0) {
+    return { bg: HEAT_BASE, text: HEAT_TEXT_LIGHT };
+  }
+  const ratio = Math.min(Math.max(minutes / maxMinutes, 0), 1);
+  const bg = getHeatColorForRatio(ratio);
+  const text = ratio > 0.8 ? HEAT_TEXT_DARK : HEAT_TEXT_LIGHT;
+  return { bg, text };
+}
+
+export function getMonthMaxMinutes(
+  studyData: StudyData,
+  year: number,
+  month: number,
+): number {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  let max = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = dateKey(new Date(year, month, d));
+    const minutes = studyData[key] ?? 0;
+    if (minutes > max) max = minutes;
+  }
+  return max;
+}
+
 export function formatDuration(minutes: number): string {
   if (minutes === 0) return "";
   if (minutes < 60) return `${minutes}m`;
@@ -59,6 +121,18 @@ export function formatDurationShort(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h}h` : `${h}h${m}m`;
+}
+
+export function formatDurationAverage(minutes: number): string {
+  if (minutes === 0) return "0m";
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+
+  const hours = minutes / 60;
+  const roundedHours = Math.round(hours * 10) / 10;
+  const totalMinutes = Math.round(roundedHours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 export function dateKey(date: Date): string {

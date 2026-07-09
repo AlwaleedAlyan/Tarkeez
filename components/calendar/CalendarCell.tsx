@@ -12,31 +12,21 @@ import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   formatDuration,
   formatMonthYear,
-  getHeatLevel,
+  getHeatColor,
   type CalendarDay,
 } from "@/lib/calendarUtils";
-
-const HEAT_COLORS: Record<number, { bg: string; text: string }> = {
-  0: { bg: "#1e241e", text: "#ffffff" },
-  1: { bg: "#233023", text: "#ffffff" },
-  2: { bg: "#304430", text: "#ffffff" },
-  3: { bg: "#415f41", text: "#ffffff" },
-  4: { bg: "#557d55", text: "#ffffff" },
-  5: { bg: "#699b69", text: "#111611" },
-};
 
 const TOKENS = {
   accent: "#7cb87c",
   accentLight: "#9dd49d",
   textMuted: "#6a7a6a",
   streakGold: "#ffaa44",
-  heatText: "#ffffff",
-  heatTextDark: "#111611",
 };
 
 interface CalendarCellProps {
   day: CalendarDay;
   minutes: number;
+  monthMaxMinutes: number;
   isSelected: boolean;
   isStreak: boolean;
   showDuration: boolean;
@@ -46,6 +36,7 @@ interface CalendarCellProps {
 export default function CalendarCell({
   day,
   minutes,
+  monthMaxMinutes,
   isSelected,
   isStreak,
   showDuration,
@@ -57,8 +48,7 @@ export default function CalendarCell({
   const [pageX, setPageX] = useState(0);
   const [pageY, setPageY] = useState(0);
 
-  const heat = getHeatLevel(minutes);
-  const colors = HEAT_COLORS[heat];
+  const colors = getHeatColor(minutes, monthMaxMinutes);
   const hasData = minutes > 0;
   const displayDuration = showDuration && hasData ? formatDuration(minutes) : "";
 
@@ -117,21 +107,11 @@ export default function CalendarCell({
         accessibilityRole="button"
         accessibilityState={{ selected: isSelected }}
       >
-        <Text
-          style={[
-            styles.dayNumber as any,
-            { color: heat === 5 ? TOKENS.heatTextDark : TOKENS.heatText },
-          ]}
-        >
+        <Text style={[styles.dayNumber as any, { color: colors.text }]}>
           {day.day}
         </Text>
         {displayDuration ? (
-          <Text
-            style={[
-              styles.duration as any,
-              { color: heat === 5 ? TOKENS.heatTextDark : TOKENS.heatText },
-            ]}
-          >
+          <Text style={[styles.duration as any, { color: colors.text }]}>
             {displayDuration}
           </Text>
         ) : null}
@@ -139,7 +119,7 @@ export default function CalendarCell({
           <View
             style={[
               styles.dot as any,
-              { backgroundColor: heat === 5 ? TOKENS.heatTextDark : TOKENS.accent },
+              { backgroundColor: colors.text },
             ]}
           />
         ) : null}
@@ -173,11 +153,12 @@ export default function CalendarCell({
 const styles = StyleSheet.create({
   wrapper: {
     aspectRatio: 1,
+    width: "100%",
     position: "relative",
   },
   cell: {
     flex: 1,
-    borderRadius: 8,
+    borderRadius: 4,
     padding: 6,
     justifyContent: "space-between",
     alignItems: "center",

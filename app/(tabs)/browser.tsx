@@ -25,39 +25,11 @@ type Bookmark = {
   icon: FeatherName;
 };
 
-type Recent = {
-  title: string;
-  url: string;
-  ago: string;
-  progress: number;
-};
-
 const BOOKMARKS: Bookmark[] = [
   { title: "YouTube",      domain: "youtube.com",     url: "https://youtube.com",      icon: "play" },
   { title: "Wikipedia",    domain: "wikipedia.org",   url: "https://wikipedia.org",    icon: "book-open" },
   { title: "Khan Academy", domain: "khanacademy.org", url: "https://khanacademy.org",  icon: "book" },
   { title: "Google",       domain: "google.com",      url: "https://google.com",       icon: "search" },
-];
-
-const RECENTS: Recent[] = [
-  {
-    title: "Linear Algebra — MIT OpenCourseWare",
-    url: "ocw.mit.edu/courses/linear-algebra",
-    ago: "2h ago",
-    progress: 0.6,
-  },
-  {
-    title: "Eigenvectors and Eigenvalues …",
-    url: "youtube.com/watch?v=…",
-    ago: "1d ago",
-    progress: 0.4,
-  },
-  {
-    title: "Shakespearean Sonnet Analysis",
-    url: "britannica.com/art/sonnet",
-    ago: "2d ago",
-    progress: 0.75,
-  },
 ];
 
 export default function BrowserScreen() {
@@ -165,86 +137,6 @@ export default function BrowserScreen() {
           </View>
         </View>
 
-        <View style={{ gap: 12 }}>
-          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-            Recently visited
-          </Text>
-          <View style={{ gap: 12 }}>
-            {RECENTS.map((r) => (
-              <Tappable
-                key={r.url}
-                onPress={() => openUrl(`https://${r.url}`, r.title)}
-                style={({ pressed }) => [
-                  styles.row,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.rowIcon,
-                    { backgroundColor: colors.secondary },
-                  ]}
-                >
-                  <Feather name="globe" size={18} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <View style={styles.rowTitleRow}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.rowTitle,
-                        { color: colors.foreground, flex: 1 },
-                      ]}
-                    >
-                      {r.title}
-                    </Text>
-                    <View style={styles.rowAgoBox}>
-                      <Feather
-                        name="clock"
-                        size={12}
-                        color={colors.mutedForeground}
-                      />
-                      <Text
-                        style={[
-                          styles.rowAgo,
-                          { color: colors.mutedForeground },
-                        ]}
-                      >
-                        {r.ago}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.rowUrl, { color: colors.mutedForeground }]}
-                  >
-                    {r.url}
-                  </Text>
-                  <View
-                    style={[
-                      styles.progressTrack,
-                      { backgroundColor: colors.muted },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.round(r.progress * 100)}%`,
-                          backgroundColor: colors.accent,
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              </Tappable>
-            ))}
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -312,52 +204,5 @@ const styles = StyleSheet.create({
   tileDomain: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-  },
-  rowIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  rowTitle: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
-  },
-  rowAgoBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  rowAgo: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-  },
-  rowUrl: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-  },
-  progressTrack: {
-    height: 3,
-    borderRadius: 1.5,
-    overflow: "hidden",
-    marginTop: 2,
-  },
-  progressFill: {
-    height: 3,
-    borderRadius: 1.5,
   },
 });

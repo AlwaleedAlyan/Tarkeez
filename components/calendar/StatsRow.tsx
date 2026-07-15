@@ -1,24 +1,19 @@
 import React from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
+import { useColors } from "@/hooks/useColors";
+
 interface StatCardProps {
   value: string;
   label: string;
 }
 
-const TOKENS = {
-  bgCard: "#242b24",
-  bgCardHover: "#2a332a",
-  border: "rgba(124, 184, 124, 0.1)",
-  accent: "#7cb87c",
-  textMuted: "#6a7a6a",
-};
-
 function StatCard({ value, label }: StatCardProps) {
+  const colors = useColors();
   return (
-    <View style={styles.card as any}>
-      <Text style={styles.value as any}>{value}</Text>
-      <Text style={styles.label as any}>{label}</Text>
+    <View style={[styles.card as any, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.value as any, { color: colors.accent }]}>{value}</Text>
+      <Text style={[styles.label as any, { color: colors.mutedForeground }]}>{label}</Text>
     </View>
   );
 }
@@ -63,10 +58,8 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    backgroundColor: TOKENS.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: TOKENS.border,
     padding: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -74,18 +67,16 @@ const styles = StyleSheet.create({
     transition: "background-color 0.2s ease",
     cursor: "default",
     ":hover": {
-      backgroundColor: TOKENS.bgCardHover,
+      opacity: 0.9,
     },
   },
   value: {
     fontFamily: "Inter_700Bold",
     fontSize: 22,
-    color: TOKENS.accent,
   },
   label: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: TOKENS.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

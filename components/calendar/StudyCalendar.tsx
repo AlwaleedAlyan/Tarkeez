@@ -13,23 +13,18 @@ import DayDetailPanel from "./DayDetailPanel";
 import MonthSelector from "./MonthSelector";
 import StatsRow from "./StatsRow";
 import StreakCard from "./StreakCard";
+import { useColors } from "@/hooks/useColors";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   computeMonthlyStats,
   dateKey,
+  getMonthData,
   formatDurationAverage,
   formatDurationHours,
   formatDurationShort,
-  getMonthData,
   type Session,
   type StudyData,
 } from "@/lib/calendarUtils";
-
-const TOKENS = {
-  bgPrimary: "#111611",
-  textPrimary: "#ffffff",
-  textSecondary: "#a0b0a0",
-};
 
 interface StudyCalendarProps {
   studyData: StudyData;
@@ -50,10 +45,10 @@ export default function StudyCalendar({
   dailyGoal = 180,
   bottomPadding = 0,
 }: StudyCalendarProps) {
+  const colors = useColors();
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const isMobile = width < 600;
-  const isTablet = width >= 600 && width < 900;
   const isDesktop = width >= 900;
 
   const today = new Date();
@@ -134,15 +129,15 @@ export default function StudyCalendar({
 
   return (
     <ScrollView
-      style={styles.root as any}
+      style={[styles.root, { backgroundColor: colors.background }]}
       contentContainerStyle={[
-        styles.content as any,
+        styles.content,
         { paddingBottom: 24 + bottomPadding },
       ]}
     >
       <View style={styles.header as any}>
-        <Text style={styles.title as any}>Study Calendar</Text>
-        <Text style={styles.subtitle as any}>
+        <Text style={[styles.title as any, { color: colors.foreground }]}>Study Calendar</Text>
+        <Text style={[styles.subtitle as any, { color: colors.mutedForeground }]}>
           Track your study habits and build consistent streaks.
         </Text>
       </View>
@@ -203,7 +198,6 @@ export default function StudyCalendar({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: TOKENS.bgPrimary,
   },
   content: {
     padding: 24,
@@ -219,12 +213,11 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: TOKENS.textPrimary,
+    letterSpacing: -0.8,
   },
   subtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: TOKENS.textSecondary,
   },
   main: {
     gap: 24,

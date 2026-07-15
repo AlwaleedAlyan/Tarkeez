@@ -85,6 +85,39 @@ export function getHeatColor(
   return { bg, text };
 }
 
+function getLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  const a = [r, g, b].map((v) => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+}
+
+export function getThemeHeatColorForRatio(
+  ratio: number,
+  accent: string,
+  muted: string,
+): string {
+  const t = Math.min(Math.max(ratio, 0), 1);
+  return interpolateColor(muted, accent, t);
+}
+
+export function getThemeHeatColor(
+  minutes: number,
+  maxMinutes: number,
+  accent: string,
+  muted: string,
+): { bg: string; text: string } {
+  if (maxMinutes <= 0 || minutes <= 0) {
+    return { bg: muted, text: getLuminance(muted) > 0.5 ? "#111611" : "#ffffff" };
+  }
+  const ratio = Math.min(Math.max(minutes / maxMinutes, 0), 1);
+  const bg = getThemeHeatColorForRatio(ratio, accent, muted);
+  const text = getLuminance(bg) > 0.5 ? "#111611" : "#ffffff";
+  return { bg, text };
+}
+
 export function getMonthMaxMinutes(
   studyData: StudyData,
   year: number,

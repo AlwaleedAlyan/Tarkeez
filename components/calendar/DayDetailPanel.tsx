@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 
 import ProgressRing from "./ProgressRing";
 import SessionItem from "./SessionItem";
+import { useColors } from "@/hooks/useColors";
 import {
   calculateStreak,
   dateKey,
@@ -13,16 +14,7 @@ import {
   type StudyData,
 } from "@/lib/calendarUtils";
 
-const TOKENS = {
-  bgCard: "#242b24",
-  border: "rgba(124, 184, 124, 0.1)",
-  accent: "#7cb87c",
-  accentDim: "rgba(124, 184, 124, 0.15)",
-  streakGold: "#ffaa44",
-  textPrimary: "#ffffff",
-  textSecondary: "#a0b0a0",
-  textMuted: "#6a7a6a",
-};
+const STREAK_GOLD = "#ffaa44";
 
 interface DayDetailPanelProps {
   selectedDate: Date;
@@ -37,6 +29,7 @@ export default function DayDetailPanel({
   sessions,
   dailyGoal = 180,
 }: DayDetailPanelProps) {
+  const colors = useColors();
   const key = dateKey(selectedDate);
   const minutes = studyData[key] ?? 0;
   const progress = minutes / dailyGoal;
@@ -50,13 +43,13 @@ export default function DayDetailPanel({
 
   return (
     <View
-      style={styles.card as any}
+      style={[styles.card as any, { backgroundColor: colors.card, borderColor: colors.border }]}
       // @ts-ignore
       aria-live="polite"
     >
       <View style={styles.header as any}>
-        <Text style={styles.title as any}>Study Sessions</Text>
-        <Text style={styles.date as any}>{formatDayMonth(selectedDate)}</Text>
+        <Text style={[styles.title as any, { color: colors.foreground }]}>Study Sessions</Text>
+        <Text style={[styles.date as any, { color: colors.mutedForeground }]}>{formatDayMonth(selectedDate)}</Text>
       </View>
 
       <View style={styles.summary as any}>
@@ -65,15 +58,15 @@ export default function DayDetailPanel({
           label={formatDurationShort(minutes)}
         />
         <View style={styles.summaryText as any}>
-          <Text style={styles.dayName as any}>{formatDayName(selectedDate)}</Text>
-          <Text style={styles.sessionCount as any}>
+          <Text style={[styles.dayName as any, { color: colors.foreground }]}>{formatDayName(selectedDate)}</Text>
+          <Text style={[styles.sessionCount as any, { color: colors.mutedForeground }]}>
             {sessions.length} {sessions.length === 1 ? "session" : "sessions"} ·{" "}
             {avgFocus(sessions)}% avg focus
           </Text>
           {isInStreak ? (
             <View style={styles.streakRow as any}>
               <Text style={styles.streakIcon as any}>🔥</Text>
-              <Text style={styles.streakText as any}>
+              <Text style={[styles.streakText as any, { color: STREAK_GOLD }]}>
                 Part of {streak}-day streak
               </Text>
             </View>
@@ -85,8 +78,8 @@ export default function DayDetailPanel({
         {sessions.length === 0 ? (
           <View style={styles.empty as any}>
             <Text style={styles.emptyIcon as any}>📭</Text>
-            <Text style={styles.emptyTitle as any}>No sessions</Text>
-            <Text style={styles.emptyText as any}>
+            <Text style={[styles.emptyTitle as any, { color: colors.foreground }]}>No sessions</Text>
+            <Text style={[styles.emptyText as any, { color: colors.mutedForeground }]}>
               No study sessions recorded for this day
             </Text>
           </View>
@@ -114,10 +107,8 @@ function formatDurationShort(minutes: number): string {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: TOKENS.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: TOKENS.border,
     padding: 18,
     gap: 18,
     animation: "fadeIn 0.4s ease-out",
@@ -134,12 +125,10 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    color: TOKENS.textPrimary,
   },
   date: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
-    color: TOKENS.textMuted,
   },
   summary: {
     flexDirection: "row",
@@ -153,12 +142,10 @@ const styles = StyleSheet.create({
   dayName: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
-    color: TOKENS.textPrimary,
   },
   sessionCount: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: TOKENS.textSecondary,
   },
   streakRow: {
     flexDirection: "row",
@@ -171,7 +158,6 @@ const styles = StyleSheet.create({
   streakText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: TOKENS.streakGold,
   },
   sessionList: {
     gap: 10,
@@ -187,12 +173,10 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: TOKENS.textPrimary,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: TOKENS.textMuted,
     textAlign: "center",
   },
 } as any);

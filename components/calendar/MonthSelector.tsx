@@ -3,17 +3,8 @@ import React from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { Tappable } from "@/components/Tappable";
+import { useColors } from "@/hooks/useColors";
 import { formatMonthYear } from "@/lib/calendarUtils";
-
-const TOKENS = {
-  bgCard: "#242b24",
-  bgCell: "#1e241e",
-  border: "rgba(124, 184, 124, 0.1)",
-  accent: "#7cb87c",
-  accentDim: "rgba(124, 184, 124, 0.15)",
-  textPrimary: "#ffffff",
-  textSecondary: "#a0b0a0",
-};
 
 interface MonthSelectorProps {
   currentMonth: Date;
@@ -28,19 +19,21 @@ export default function MonthSelector({
   onNext,
   onToday,
 }: MonthSelectorProps) {
+  const colors = useColors();
+
   return (
-    <View style={styles.container as any}>
+    <View style={[styles.container as any, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.left as any}>
-        <Tappable onPress={onPrev} style={styles.arrowBtn as any}>
-          <Feather name="chevron-left" size={20} color={TOKENS.textPrimary} />
+        <Tappable onPress={onPrev} style={[styles.arrowBtn as any, { backgroundColor: colors.muted }]}>
+          <Feather name="chevron-left" size={20} color={colors.foreground} />
         </Tappable>
-        <Text style={styles.monthLabel as any}>{formatMonthYear(currentMonth)}</Text>
-        <Tappable onPress={onNext} style={styles.arrowBtn as any}>
-          <Feather name="chevron-right" size={20} color={TOKENS.textPrimary} />
+        <Text style={[styles.monthLabel as any, { color: colors.foreground }]}>{formatMonthYear(currentMonth)}</Text>
+        <Tappable onPress={onNext} style={[styles.arrowBtn as any, { backgroundColor: colors.muted }]}>
+          <Feather name="chevron-right" size={20} color={colors.foreground} />
         </Tappable>
       </View>
-      <Tappable onPress={onToday} style={styles.todayBtn as any}>
-        <Text style={styles.todayText as any}>Today</Text>
+      <Tappable onPress={onToday} style={[styles.todayBtn as any, { borderColor: colors.border }]}>
+        <Text style={[styles.todayText as any, { color: colors.mutedForeground }]}>Today</Text>
       </Tappable>
     </View>
   );
@@ -51,10 +44,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: TOKENS.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: TOKENS.border,
     padding: 8,
     paddingHorizontal: 12,
   },
@@ -67,18 +58,16 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: TOKENS.bgCell,
     alignItems: "center",
     justifyContent: "center",
     transition: "background-color 0.15s ease",
     ":hover": {
-      backgroundColor: TOKENS.accentDim,
+      opacity: 0.8,
     },
   },
   monthLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 18,
-    color: TOKENS.textPrimary,
     minWidth: 160,
     textAlign: "center",
   },
@@ -87,15 +76,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: TOKENS.border,
     transition: "border-color 0.15s ease",
     ":hover": {
-      borderColor: TOKENS.accent,
+      borderColor: "transparent",
     },
   },
   todayText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: TOKENS.textSecondary,
   },
 } as any);

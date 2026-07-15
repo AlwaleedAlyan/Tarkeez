@@ -2,9 +2,10 @@ import React from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
 import CalendarCell from "./CalendarCell";
+import { useColors } from "@/hooks/useColors";
 import {
   dateKey,
-  getHeatColorForRatio,
+  getThemeHeatColorForRatio,
   getMonthData,
   getMonthMaxMinutes,
   type StudyData,
@@ -14,12 +15,6 @@ import {
 const LEGEND_RATIOS = [0, 0.2, 0.4, 0.6, 0.8, 1];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const TOKENS = {
-  bgCard: "#242b24",
-  border: "rgba(124, 184, 124, 0.1)",
-  textMuted: "#6a7a6a",
-};
 
 interface CalendarGridProps {
   currentMonth: Date;
@@ -40,6 +35,7 @@ export default function CalendarGrid({
   onSelectDate,
   switching = false,
 }: CalendarGridProps) {
+  const colors = useColors();
   const isCalendar = variant === "calendar";
   const days = getMonthData(
     currentMonth.getFullYear(),
@@ -74,7 +70,7 @@ export default function CalendarGrid({
   };
 
   return (
-    <View style={[styles.card as any, isCalendar && (styles.cardCalendar as any)]}>
+    <View style={[styles.card as any, isCalendar && (styles.cardCalendar as any), { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.weekdayHeader as any}>
         {WEEKDAYS.map((w) => (
           <Text
@@ -82,6 +78,7 @@ export default function CalendarGrid({
             style={[
               styles.weekdayLabel as any,
               isCalendar && (styles.weekdayLabelCalendar as any),
+              { color: colors.mutedForeground },
             ]}
           >
             {w}
@@ -127,19 +124,19 @@ export default function CalendarGrid({
       </View>
 
       <View style={styles.legend as any}>
-        <Text style={styles.legendLabel as any}>Less</Text>
+        <Text style={[styles.legendLabel as any, { color: colors.mutedForeground }]}>Less</Text>
         <View style={styles.legendBoxes as any}>
           {LEGEND_RATIOS.map((ratio, i) => (
             <View
               key={i}
               style={[
                 styles.legendBox as any,
-                { backgroundColor: getHeatColorForRatio(ratio) },
+                { backgroundColor: getThemeHeatColorForRatio(ratio, colors.accent, colors.muted) },
               ]}
             />
           ))}
         </View>
-        <Text style={styles.legendLabel as any}>More</Text>
+        <Text style={[styles.legendLabel as any, { color: colors.mutedForeground }]}>More</Text>
       </View>
     </View>
   );
@@ -147,10 +144,8 @@ export default function CalendarGrid({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: TOKENS.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: TOKENS.border,
     padding: 8,
     gap: 8,
   },
@@ -169,7 +164,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    color: TOKENS.textMuted,
   },
   weekdayLabelCalendar: {
     fontSize: 10,
@@ -195,7 +189,6 @@ const styles = StyleSheet.create({
   legendLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 8,
-    color: TOKENS.textMuted,
   },
   legendBoxes: {
     flexDirection: "row",

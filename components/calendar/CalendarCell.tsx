@@ -8,21 +8,16 @@ import {
 } from "react-native";
 
 import { Tappable } from "@/components/Tappable";
+import { useColors } from "@/hooks/useColors";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   formatDuration,
   formatMonthYear,
-  getHeatColor,
+  getThemeHeatColor,
   type CalendarDay,
 } from "@/lib/calendarUtils";
 
-const TOKENS = {
-  accent: "#7cb87c",
-  accentLight: "#9dd49d",
-  textMuted: "#6a7a6a",
-  streakGold: "#ffaa44",
-  cellBg: "#1e241e",
-};
+const STREAK_GOLD = "#ffaa44";
 
 interface CalendarCellProps {
   day: CalendarDay;
@@ -43,13 +38,14 @@ export default function CalendarCell({
   variant = "heatmap",
   onSelect,
 }: CalendarCellProps) {
+  const colors = useColors();
   const reducedMotion = useReducedMotion();
   const [hover, setHover] = useState(false);
   const [layout, setLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [pageX, setPageX] = useState(0);
   const [pageY, setPageY] = useState(0);
 
-  const colors = getHeatColor(minutes, monthMaxMinutes);
+  const heat = getThemeHeatColor(minutes, monthMaxMinutes, colors.accent, colors.muted);
   const hasData = minutes > 0;
   const isCalendar = variant === "calendar";
 
@@ -93,18 +89,18 @@ export default function CalendarCell({
           baseCellStyle,
           {
             backgroundColor: isCalendar
-              ? TOKENS.cellBg
-              : colors.bg,
-            opacity: day.isCurrentMonth ? 1 : 0.3,
+              ? colors.muted
+              : heat.bg,
+            opacity: day.isCurrentMonth ? 1 : 0.35,
             borderWidth:
               isSelected || day.isToday || hover || pressed ? 2 : 0,
             borderColor: isSelected
-              ? TOKENS.accentLight
+              ? colors.accent
               : day.isToday || hover
-                ? TOKENS.accent
+                ? colors.primary
                 : "transparent",
             ...(day.isToday && Platform.OS === "web"
-              ? { boxShadow: `0 0 0 1px ${TOKENS.accent}` }
+              ? { boxShadow: `0 0 0 1px ${colors.primary}` }
               : {}),
             transform:
               hover && !reducedMotion ? [{ scale: 1.05 }] : [{ scale: 1 }],
@@ -121,7 +117,7 @@ export default function CalendarCell({
         <Text
           style={[
             baseDayStyle,
-            { color: isCalendar ? "#ffffff" : colors.text },
+            { color: isCalendar ? colors.foreground : heat.text },
           ]}
         >
           {day.day}
@@ -130,7 +126,7 @@ export default function CalendarCell({
           <View
             style={[
               styles.heatSquare as any,
-              { backgroundColor: colors.bg },
+              { backgroundColor: heat.bg },
             ]}
           />
         ) : null}
@@ -153,12 +149,14 @@ export default function CalendarCell({
             {
               left: pageX - layout.x - 60,
               top: pageY - layout.y - 40,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
             },
           ]}
           // @ts-ignore
           role="tooltip"
         >
-          <Text style={styles.tooltipText as any}>
+          <Text style={[styles.tooltipText as any, { color: colors.foreground }]}>
             {formatMonthYear(day.date)} {day.day}:{" "}
             {hasData ? formatDuration(minutes) + " studied" : "No study session"}
           </Text>
@@ -190,6 +188,8 @@ const styles = StyleSheet.create({
   },
   cellHeatmap: {
     padding: 2,
+    justifyContent: "center",
+    alignItems: "center",
   },
   cellCalendar: {
     padding: 6,
@@ -226,10 +226,8 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: "absolute",
-    backgroundColor: "#111611",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(124, 184, 124, 0.2)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     zIndex: 10,
@@ -240,7 +238,6 @@ const styles = StyleSheet.create({
   tooltipText: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#ffffff",
     whiteSpace: "nowrap",
   },
 } as any);

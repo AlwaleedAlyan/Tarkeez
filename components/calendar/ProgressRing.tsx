@@ -2,10 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
-const TOKENS = {
-  bgCard: "#242b24",
-  accent: "#7cb87c",
-};
+import { useColors } from "@/hooks/useColors";
 
 interface ProgressRingProps {
   progress: number; // 0 to 1
@@ -20,6 +17,7 @@ export default function ProgressRing({
   strokeWidth = 4,
   label,
 }: ProgressRingProps) {
+  const colors = useColors();
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.max(0, Math.min(1, progress));
@@ -34,7 +32,7 @@ export default function ProgressRing({
           cy={center}
           r={radius}
           fill="none"
-          stroke={TOKENS.bgCard}
+          stroke={colors.muted}
           strokeWidth={strokeWidth}
         />
         <Circle
@@ -42,7 +40,7 @@ export default function ProgressRing({
           cy={center}
           r={radius}
           fill="none"
-          stroke={TOKENS.accent}
+          stroke={colors.accent}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -52,7 +50,7 @@ export default function ProgressRing({
           rotation="-90"
         />
       </Svg>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: colors.accent }]}>{label}</Text>
     </View>
   );
 }
@@ -68,6 +66,5 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: TOKENS.accent,
   },
 });

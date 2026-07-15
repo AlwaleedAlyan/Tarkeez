@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
+
+import { useColors } from "@/hooks/useColors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import StudyCalendar from "@/components/calendar/StudyCalendar";
@@ -21,6 +23,7 @@ function materialIcon(title: string): string {
 }
 
 export default function CalendarScreen() {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { sessions: librarySessions, materials, notes } = useLibrary();
 
@@ -72,7 +75,7 @@ export default function CalendarScreen() {
     }, [librarySessions, materials, notes]);
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.background }]}>
       <StudyCalendar
         studyData={studyData}
         sessions={sessions}
@@ -88,6 +91,5 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#111611",
   },
 });

@@ -161,10 +161,10 @@ export default function InsightsScreen() {
     metric === "pages" ? stats.todayPages : stats.todayWords;
 
   const [shareOpen, setShareOpen] = useState(false);
-  const useToday = stats.todaySec > 0;
-  const shareFocusedSec = useToday ? stats.todaySec : stats.totalSec;
-  const shareMetricValue = useToday ? metricValueToday : metricValueTotal;
-  const shareFocusPct = useToday ? stats.todayFocusPct : stats.totalFocusPct;
+  // The post card always reflects today — never the lifetime totals.
+  const shareFocusedSec = stats.todaySec;
+  const shareMetricValue = metricValueToday;
+  const shareFocusPct = stats.todayFocusPct;
 
   const recent = useMemo(() => sessions.slice(0, 8), [sessions]);
 
@@ -179,6 +179,10 @@ export default function InsightsScreen() {
     stats.totalSec + stats.totalPausedSec > 0
       ? stats.totalSec / (stats.totalSec + stats.totalPausedSec)
       : 1;
+  const hasTodayWall = stats.todaySec + stats.todayPausedSec > 0;
+  const todayBarRatio = hasTodayWall
+    ? stats.todaySec / (stats.todaySec + stats.todayPausedSec)
+    : 0;
 
   // Build the rolling 7-day label set.
   const dayLabels = useMemo(() => {
@@ -348,30 +352,74 @@ export default function InsightsScreen() {
                 </Text>
               </Text>
             </View>
-            {stats.todaySec + stats.todayPausedSec > 0 ? (
-              <View style={styles.qualityToday}>
+          </View>
+
+          <View style={styles.focusBarsWrap}>
+            {hasTodayWall ? (
+              <View style={styles.focusBarRow}>
                 <Text
-                  style={[styles.qualityTodayLabel, { color: colors.mutedForeground }]}
+                  style={[
+                    styles.focusBarLabel,
+                    { color: colors.mutedForeground },
+                  ]}
                 >
                   Today
                 </Text>
-                <Text style={[styles.qualityTodayValue, { color: colors.foreground }]}>
+                <View
+                  style={[
+                    styles.focusBar,
+                    styles.focusBarFlex,
+                    { backgroundColor: colors.muted },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.focusBarFill,
+                      {
+                        width: `${todayBarRatio * 100}%`,
+                        backgroundColor: colors.accent,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={[styles.focusBarPct, { color: colors.foreground }]}
+                >
                   {stats.todayFocusPct}%
                 </Text>
               </View>
             ) : null}
-          </View>
 
-          <View style={[styles.focusBar, { backgroundColor: colors.muted }]}>
-            <View
-              style={[
-                styles.focusBarFill,
-                {
-                  width: `${focusBarRatio * 100}%`,
-                  backgroundColor: colors.accent,
-                },
-              ]}
-            />
+            <View style={styles.focusBarRow}>
+              <Text
+                style={[
+                  styles.focusBarLabel,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                All time
+              </Text>
+              <View
+                style={[
+                  styles.focusBar,
+                  styles.focusBarFlex,
+                  { backgroundColor: colors.muted },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.focusBarFill,
+                    {
+                      width: `${focusBarRatio * 100}%`,
+                      backgroundColor: colors.accent,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.focusBarPct, { color: colors.foreground }]}>
+                {stats.totalFocusPct}%
+              </Text>
+            </View>
           </View>
 
           <View style={styles.qualityLegend}>
@@ -679,19 +727,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0,
   },
-  qualityToday: {
-    alignItems: "flex-end",
+  focusBarsWrap: {
+    gap: 8,
   },
-  qualityTodayLabel: {
+  focusBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  focusBarLabel: {
+    width: 52,
     fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    fontSize: 12,
   },
-  qualityTodayValue: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 18,
-    marginTop: 2,
+  focusBarFlex: {
+    flex: 1,
+  },
+  focusBarPct: {
+    width: 40,
+    textAlign: "right",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
   },
   focusBar: {
     height: 8,

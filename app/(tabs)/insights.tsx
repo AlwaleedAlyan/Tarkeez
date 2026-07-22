@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   RefreshControl,
@@ -20,6 +20,7 @@ import { StrokeThumbnail } from "@/components/StrokeThumbnail";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
+import { useCountUp, useEaseOutProgress } from "@/hooks/useCountUp";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { safeHost } from "@/lib/normalizeUrl";
 
@@ -160,6 +161,38 @@ export default function InsightsScreen() {
   const metricValueToday =
     metric === "pages" ? stats.todayPages : stats.todayWords;
 
+  // Replay entry animations on every Insights tab press and on focus.
+  const [replayKey, setReplayKey] = useState(0);
+  const lastBumpRef = useRef(0);
+  const bumpReplay = useCallback(() => {
+    const now = Date.now();
+    if (now - lastBumpRef.current < 100) return; // dedupe tabPress + focus
+    lastBumpRef.current = now;
+    setReplayKey((k) => k + 1);
+  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      bumpReplay();
+    }, [bumpReplay]),
+  );
+  // Re-press of the active tab (classic tab bar; no-op under NativeTabs).
+  const navigation = useNavigation();
+  useEffect(() => {
+    const nav = navigation as unknown as {
+      addListener: (event: string, cb: () => void) => () => void;
+    };
+    return nav.addListener("tabPress", bumpReplay);
+  }, [navigation, bumpReplay]);
+
+  // Animated display values — sourced from the exact same `stats` data.
+  const todaySecAnim = useCountUp(stats.todaySec, replayKey);
+  const weekSecAnim = useCountUp(stats.weekSec, replayKey);
+  const totalSecAnim = useCountUp(stats.totalSec, replayKey);
+  const metricAnim = useCountUp(metricValueTotal, replayKey);
+  const focusPctAnim = useCountUp(stats.totalFocusPct, replayKey);
+  const todayPctAnim = useCountUp(stats.todayFocusPct, replayKey);
+  const barProgress = useEaseOutProgress(replayKey, 1000);
+
   const [shareOpen, setShareOpen] = useState(false);
   // The post card always reflects today — never the lifetime totals.
   const shareFocusedSec = stats.todaySec;
@@ -263,25 +296,25 @@ export default function InsightsScreen() {
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatTile
               label="Today"
-              value={fmtDuration(stats.todaySec)}
+              value={fmtDuration(todaySecAnim)}
               icon="sun"
               accent
             />
             <StatTile
               label="This week"
-              value={fmtDuration(stats.weekSec)}
+              value={fmtDuration(weekSecAnim)}
               icon="calendar"
             />
           </View>
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatTile
               label="Total focus"
-              value={fmtDuration(stats.totalSec)}
+              value={fmtDuration(totalSecAnim)}
               icon="clock"
             />
             <StatTile
               label={METRIC_TILE_LABEL[metric]}
-              value={metricValueTotal.toString()}
+              value={metricAnim.toString()}
               icon={METRIC_ICON[metric]}
             />
           </View>
@@ -346,7 +379,7 @@ export default function InsightsScreen() {
                 Focus quality
               </Text>
               <Text style={[styles.qualityValue, { color: colors.foreground }]}>
-                {stats.totalFocusPct}
+                {focusPctAnim}
                 <Text style={[styles.qualityUnit, { color: colors.mutedForeground }]}>
                   {" "}%
                 </Text>
@@ -376,8 +409,9 @@ export default function InsightsScreen() {
                     style={[
                       styles.focusBarFill,
                       {
-                        width: `${todayBarRatio * 100}%`,
                         backgroundColor: colors.accent,
+                        transform: [{ scaleX: todayBarRatio * barProgress }],
+                        transformOrigin: "left center",
                       },
                     ]}
                   />
@@ -385,7 +419,7 @@ export default function InsightsScreen() {
                 <Text
                   style={[styles.focusBarPct, { color: colors.foreground }]}
                 >
-                  {stats.todayFocusPct}%
+                  {todayPctAnim}%
                 </Text>
               </View>
             ) : null}
@@ -410,14 +444,15 @@ export default function InsightsScreen() {
                   style={[
                     styles.focusBarFill,
                     {
-                      width: `${focusBarRatio * 100}%`,
                       backgroundColor: colors.accent,
+                      transform: [{ scaleX: focusBarRatio * barProgress }],
+                      transformOrigin: "left center",
                     },
                   ]}
                 />
               </View>
               <Text style={[styles.focusBarPct, { color: colors.foreground }]}>
-                {stats.totalFocusPct}%
+                {focusPctAnim}%
               </Text>
             </View>
           </View>
@@ -755,6 +790,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   focusBarFill: {
+    width: "100%",
     height: "100%",
     borderRadius: 4,
   },

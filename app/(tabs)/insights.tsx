@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Tappable } from "@/components/Tappable";
@@ -20,7 +21,7 @@ import { StrokeThumbnail } from "@/components/StrokeThumbnail";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLibrary } from "@/contexts/LibraryContext";
 import { useColors } from "@/hooks/useColors";
-import { useCountUp, useEaseOutProgress } from "@/hooks/useCountUp";
+import { useBarGrowProgress, useCountUp, useEaseOutProgress } from "@/hooks/useCountUp";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { safeHost } from "@/lib/normalizeUrl";
 
@@ -193,6 +194,27 @@ export default function InsightsScreen() {
   const todayPctAnim = useCountUp(stats.todayFocusPct, replayKey);
   const barProgress = useEaseOutProgress(replayKey, 1000);
 
+  // "Last 7 days" grow-up animation runs ONLY while the card is fully inside
+  // the viewport (equivalent of IntersectionObserver with threshold 1.0).
+  const { height: windowHeight } = useWindowDimensions();
+  const [chartVisible, setChartVisible] = useState(false);
+  const scrollYRef = useRef(0);
+  const cardYRef = useRef(0);
+  const cardHRef = useRef(0);
+  const checkChartVisibility = useCallback(() => {
+    const top = cardYRef.current - scrollYRef.current;
+    const fully =
+      cardHRef.current > 0 &&
+      top >= 0 &&
+      top + cardHRef.current <= windowHeight;
+    setChartVisible((prev) => (prev === fully ? prev : fully));
+  }, [windowHeight]);
+  const growProgress = useBarGrowProgress(
+    chartVisible,
+    replayKey,
+    stats.dayBuckets.length,
+  );
+
   const [shareOpen, setShareOpen] = useState(false);
   // The post card always reflects today — never the lifetime totals.
   const shareFocusedSec = stats.todaySec;
@@ -237,6 +259,11 @@ export default function InsightsScreen() {
           paddingHorizontal: 20,
           gap: 24,
         }}
+        onScroll={(e) => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+          checkChartVisibility();
+        }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -477,13 +504,20 @@ export default function InsightsScreen() {
           </View>
         </View>
 
-        <Tappable
-          onPress={() => router.push("/calendar")}
-          accessibilityLabel="Open study calendar"
-          style={({ pressed }) => [
-            { opacity: pressed ? 0.85 : 1 },
-          ]}
+        <View
+          onLayout={(e) => {
+            cardYRef.current = e.nativeEvent.layout.y;
+            cardHRef.current = e.nativeEvent.layout.height;
+            checkChartVisibility();
+          }}
         >
+          <Tappable
+            onPress={() => router.push("/calendar")}
+            accessibilityLabel="Open study calendar"
+            style={({ pressed }) => [
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
           <View
             style={[
               styles.card,
@@ -508,7 +542,8 @@ export default function InsightsScreen() {
                       style={[
                         styles.bar,
                         {
-                          height: h,
+                          height:
+                            sec === 0 ? h : Math.max(1, h * growProgress(i)),
                           backgroundColor:
                             sec === 0
                               ? colors.muted
@@ -536,7 +571,8 @@ export default function InsightsScreen() {
               })}
             </View>
           </View>
-        </Tappable>
+          </Tappable>
+        </View>
 
         <View style={{ gap: 12 }}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>

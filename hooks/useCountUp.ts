@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 
@@ -85,4 +85,55 @@ export function useCountUp(
 export function useEaseOutProgress(replayKey: number, duration = 1000): number {
   const { progress } = useEaseDriver(replayKey, duration);
   return progress;
+}
+
+/**
+ * Bottom-to-top grow animation for a group of bars (e.g. a bar chart).
+ *
+ * Returns a `progress(index)` getter: 0 → 1 per bar with ease-out-cubic
+ * easing and a slight left-to-right stagger. The animation starts whenever
+ * `active` turns true (or `replayKey` changes while active) and resets to 0
+ * whenever `active` turns false, so re-entry always starts clean.
+ *
+ * Respects prefers-reduced-motion by always reporting full progress.
+ */
+export function useBarGrowProgress(
+  active: boolean,
+  replayKey: number,
+  count: number,
+  duration = 800,
+  stagger = 50,
+): (index: number) => number {
+  const reducedMotion = useReducedMotion();
+  // -1 = idle at 0 (inactive / pre-animation).
+  const [elapsed, setElapsed] = useState(-1);
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    if (!active) {
+      setElapsed(-1);
+      return;
+    }
+    setElapsed(0);
+    const start = performance.now();
+    const total = duration + stagger * Math.max(0, count - 1);
+    let raf = 0;
+    const tick = (now: number) => {
+      const e = now - start;
+      setElapsed(e);
+      if (e < total) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, replayKey, count, duration, stagger, reducedMotion]);
+
+  return useCallback(
+    (index: number) => {
+      if (reducedMotion) return 1;
+      if (elapsed < 0) return 0;
+      const t = Math.min(1, Math.max(0, (elapsed - index * stagger) / duration));
+      return easeOutCubic(t);
+    },
+    [reducedMotion, elapsed, stagger, duration],
+  );
 }

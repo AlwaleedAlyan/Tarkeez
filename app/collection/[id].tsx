@@ -46,12 +46,17 @@ export default function CollectionDetailScreen() {
     deleteNote,
     deleteCollection,
     updateCollection,
+    updateNote,
     removeMaterialFromCollection,
     removeNoteFromCollection,
   } = useLibrary();
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [renamingNote, setRenamingNote] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   const exitToLibrary = useCallback(() => {
     router.replace("/(tabs)");
@@ -177,9 +182,24 @@ export default function CollectionDetailScreen() {
     }
   };
 
+  const onRenameNote = async (name: string) => {
+    if (!renamingNote) return;
+    try {
+      await updateNote(renamingNote.id, { title: name });
+      setRenamingNote(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not rename.";
+      Alert.alert("Rename failed", msg);
+    }
+  };
+
   const onNoteMenu = (noteId: string, title: string) => {
     Alert.alert(title || "Untitled", undefined, [
       { text: "Cancel", style: "cancel" },
+      {
+        text: "Rename",
+        onPress: () => setRenamingNote({ id: noteId, title }),
+      },
       {
         text: "Add to collection…",
         onPress: () => setPickerTarget({ kind: "note", id: noteId }),
@@ -333,6 +353,15 @@ export default function CollectionDetailScreen() {
         initialValue={collection.name}
         onSubmit={onRename}
         onCancel={() => setRenameOpen(false)}
+      />
+
+      <NameInputModal
+        visible={renamingNote !== null}
+        title="Rename note"
+        placeholder="Note name"
+        initialValue={renamingNote?.title ?? ""}
+        onSubmit={onRenameNote}
+        onCancel={() => setRenamingNote(null)}
       />
     </View>
   );

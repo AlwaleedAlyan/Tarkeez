@@ -60,6 +60,7 @@ export default function LibraryScreen() {
     updateCollection,
     createNote,
     deleteNote,
+    updateNote,
     refreshAll,
   } = useLibrary();
   const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
@@ -70,6 +71,10 @@ export default function LibraryScreen() {
   const [editingCollection, setEditingCollection] = useState<Collection | null>(
     null,
   );
+  const [renamingNote, setRenamingNote] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [itemMenuTarget, setItemMenuTarget] = useState<{
     kind: "material" | "note";
@@ -179,6 +184,17 @@ export default function LibraryScreen() {
     }
   };
 
+  const onRenameNote = async (name: string) => {
+    if (!renamingNote) return;
+    try {
+      await updateNote(renamingNote.id, { title: name });
+      setRenamingNote(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not rename.";
+      Alert.alert("Rename failed", msg);
+    }
+  };
+
   const onMaterialMenu = (materialId: string, title: string) => {
     if (Platform.OS === "web") {
       setItemMenuTarget({ kind: "material", id: materialId, title });
@@ -225,6 +241,10 @@ export default function LibraryScreen() {
     }
     Alert.alert(title || "Untitled", undefined, [
       { text: "Cancel", style: "cancel" },
+      {
+        text: "Rename",
+        onPress: () => setRenamingNote({ id: noteId, title }),
+      },
       {
         text: "Add to collection…",
         onPress: () => setPickerTarget({ kind: "note", id: noteId }),
@@ -431,6 +451,15 @@ export default function LibraryScreen() {
         onCancel={() => setEditingCollection(null)}
       />
 
+      <NameInputModal
+        visible={renamingNote !== null}
+        title="Rename note"
+        placeholder="Note name"
+        initialValue={renamingNote?.title ?? ""}
+        onSubmit={onRenameNote}
+        onCancel={() => setRenamingNote(null)}
+      />
+
       {pickerTarget ? (
         <CollectionPickerModal
           target={pickerTarget}
@@ -466,6 +495,20 @@ export default function LibraryScreen() {
               >
                 {itemMenuTarget.title || "Untitled"}
               </Text>
+              {itemMenuTarget.kind === "note" ? (
+                <MenuRow
+                  icon="edit-2"
+                  label="Rename"
+                  onPress={() => {
+                    const { id, title } = itemMenuTarget;
+                    setItemMenuTarget(null);
+                    setRenamingNote({ id, title });
+                  }}
+                  iconColor={colors.primary}
+                  foreground={colors.foreground}
+                  border={colors.border}
+                />
+              ) : null}
               <MenuRow
                 icon="folder-plus"
                 label="Add to collection…"

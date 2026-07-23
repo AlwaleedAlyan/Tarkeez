@@ -484,6 +484,7 @@ export default function NoteScreen() {
             placeholderTextColor={colors.mutedForeground}
             style={[styles.titleInput, { color: colors.foreground }]}
             returnKeyType="done"
+            maxLength={60}
           />
           {paused ? (
             <View

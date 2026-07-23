@@ -493,6 +493,7 @@ export default function NoteScreenWeb() {
             placeholderTextColor={colors.mutedForeground}
             style={[styles.titleInput, { color: colors.foreground }]}
             returnKeyType="done"
+            maxLength={60}
           />
         </View>
       ) : null}

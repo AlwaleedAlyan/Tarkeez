@@ -3,17 +3,33 @@
 // Secrets required: YOUTUBE_API_KEY, GEMINI_API_KEY
 //
 // Contract:
-//   POST { videoId: string }
+//   POST { videoId: string }   (Authorization: Bearer <user JWT> required)
 //   → 200 { isEducational: boolean, reason: string }
-//   → 400 { error: string }
+//   → 400 { error: string }   malformed request
+//   → 401 { error: string }   missing/invalid auth token
+//   → 429 { error, retryAfterSeconds }   per-user rate limit exceeded
+//   → 502 { error: string }   upstream (YouTube/Gemini) failure
+//   → 503 { error: string }   rate-limit backend unavailable (fail-closed)
 
 // @ts-expect-error — Deno std lives on a URL at runtime; TS sees no module.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
+// @ts-expect-error — Deno-style relative import with explicit .ts extension.
+import { HttpError, rateLimit, requireUserId } from "../_shared/guard.ts";
 
 // @ts-expect-error — Deno is a runtime global on Supabase Functions.
 const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") ?? "";
 // @ts-expect-error — see above.
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+
+// Per-user throttle for the paid YouTube Data + Gemini calls. Verdicts are
+// cached client-side, so genuine usage is far below this.
+// @ts-expect-error — Deno is a runtime global on Supabase Functions.
+const RATE_LIMIT_MAX = Number(Deno.env.get("RATE_LIMIT_MAX") ?? "30");
+const RATE_LIMIT_WINDOW_SECONDS = Number(
+  // @ts-expect-error — Deno is a runtime global on Supabase Functions.
+  Deno.env.get("RATE_LIMIT_WINDOW_SECONDS") ?? "3600",
+);
 
 const EDUCATION_CATEGORY = "27";
 // Categories that are clearly not study material. Howto&Style (26) is
@@ -94,12 +110,34 @@ serve(async (req: Request): Promise<Response> => {
 
   let videoId: string;
   try {
-    const body = await req.json();
+    // AuthN + per-user rate limit guard the paid API calls (FIX-01).
+    const userId = await requireUserId(req);
+
+    const body = await req.json().catch(() => null);
     videoId = typeof body?.videoId === "string" ? body.videoId : "";
-  } catch {
-    return json({ error: "invalid_json" }, 400);
+    // YouTube IDs are exactly 11 chars of [A-Za-z0-9_-].
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return json({ error: "valid videoId required" }, 400);
+    }
+
+    const quota = await rateLimit(
+      userId,
+      "classify-youtube",
+      RATE_LIMIT_MAX,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
+    if (!quota.allowed) {
+      throw new HttpError(429, "rate_limited", quota.retryAfterSeconds);
+    }
+  } catch (e) {
+    if (e instanceof HttpError) {
+      return json(
+        { error: e.message, retryAfterSeconds: e.retryAfterSeconds },
+        e.status,
+      );
+    }
+    return json({ error: "guard_failed" }, 500);
   }
-  if (!videoId) return json({ error: "videoId required" }, 400);
 
   if (!YOUTUBE_API_KEY || !GEMINI_API_KEY) {
     return json({ error: "missing_api_keys" }, 500);

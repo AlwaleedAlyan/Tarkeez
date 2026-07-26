@@ -52,3 +52,6 @@ tarkeez.db-journal
 tarkeez.db-wal
 tarkeez.db-shm
 *.db
+
+
+SOP.md

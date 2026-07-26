@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,9 +11,17 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
-import Animated, { LinearTransition } from "react-native-reanimated";
+import Animated, {
+  LinearTransition,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,10 +31,15 @@ import {
   CollectionPickerModal,
   type PickerTarget,
 } from "@/components/CollectionPickerModal";
+import {
+  DraggableCard,
+  type DragBeginInfo,
+} from "@/components/DraggableCard";
 import { EmptyState } from "@/components/EmptyState";
 import { MaterialCard } from "@/components/MaterialCard";
 import { NameInputModal } from "@/components/NameInputModal";
 import { NoteCard } from "@/components/NoteCard";
+import { Toast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useLibrary,
@@ -41,6 +54,10 @@ import { MAX_MATERIAL_BYTES } from "@/lib/api";
 type LibraryItem =
   | { kind: "material"; createdAt: number; m: Material }
   | { kind: "note"; createdAt: number; n: Note };
+
+type DragSubject =
+  | { kind: "material"; m: Material }
+  | { kind: "note"; n: Note };
 
 export default function LibraryScreen() {
   const colors = useColors();
@@ -61,6 +78,8 @@ export default function LibraryScreen() {
     createNote,
     deleteNote,
     updateNote,
+    addNoteToCollection,
+    addMaterialToCollection,
     refreshAll,
   } = useLibrary();
   const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
@@ -81,6 +100,156 @@ export default function LibraryScreen() {
     id: string;
     title: string;
   } | null>(null);
+
+  const { width: windowWidth } = useWindowDimensions();
+  // Matches the list's contentContainerStyle paddingHorizontal: 20.
+  const overlayWidth = windowWidth - 40;
+
+  // --- Long-press drag-to-collection state ---
+  const [dragItem, setDragItem] = useState<
+    (DragSubject & { startX: number; startY: number }) | null
+  >(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [dropPulse, setDropPulse] = useState<{ id: string; count: number }>({
+    id: "",
+    count: 0,
+  });
+  const [toast, setToast] = useState<string | null>(null);
+
+  const dragTx = useSharedValue(0);
+  const dragTy = useSharedValue(0);
+  // 0 while lifting/dragging, animates to 1 for the drop (shrink + fade).
+  const dropAnim = useSharedValue(0);
+
+  const collectionRefs = useRef(new Map<string, View>());
+  const collectionBounds = useRef<
+    { id: string; x: number; y: number; w: number; h: number }[]
+  >([]);
+  const highlightedRef = useRef<string | null>(null);
+  // Guards the card's own Pressable: after a long-press activates, the
+  // release must not also trigger onPress (mainly a react-native-web
+  // concern, where RNGH doesn't cancel RNW's responder).
+  const suppressTapRef = useRef(false);
+
+  const hitTestCollection = (absX: number, absY: number): string | null => {
+    for (const b of collectionBounds.current) {
+      if (
+        absX >= b.x &&
+        absX <= b.x + b.w &&
+        absY >= b.y &&
+        absY <= b.y + b.h
+      ) {
+        return b.id;
+      }
+    }
+    return null;
+  };
+
+  const setHighlight = (id: string | null) => {
+    if (id === highlightedRef.current) return;
+    highlightedRef.current = id;
+    setHighlightedId(id);
+  };
+
+  const clearDrag = () => {
+    setDragItem(null);
+    setHighlight(null);
+    dropAnim.value = 0;
+    suppressTapRef.current = false;
+  };
+
+  const onCardLongPressStart = () => {
+    suppressTapRef.current = true;
+  };
+
+  const onCardMenuLongPress = (openMenu: () => void) => {
+    suppressTapRef.current = true;
+    openMenu();
+    setTimeout(() => {
+      suppressTapRef.current = false;
+    }, 400);
+  };
+
+  const onCardDragBegin = (subject: DragSubject, info: DragBeginInfo) => {
+    setDragItem({ ...subject, startX: info.startX, startY: info.startY });
+    // Scrolling is disabled while dragging, so bounds stay valid for the
+    // whole gesture.
+    collectionBounds.current = [];
+    collectionRefs.current.forEach((ref, id) => {
+      ref.measureInWindow((x, y, w, h) => {
+        collectionBounds.current.push({ id, x, y, w, h });
+      });
+    });
+  };
+
+  const onCardDragMove = (absX: number, absY: number) => {
+    setHighlight(hitTestCollection(absX, absY));
+  };
+
+  const commitDrop = async (subject: DragSubject, collectionId: string) => {
+    const name =
+      collections.find((c) => c.id === collectionId)?.name ?? "collection";
+    try {
+      if (subject.kind === "note") {
+        await addNoteToCollection(subject.n.id, collectionId);
+      } else {
+        await addMaterialToCollection(subject.m.id, collectionId);
+      }
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => {});
+      }
+      setDropPulse((p) => ({ id: collectionId, count: p.count + 1 }));
+      setToast(`Added to ${name}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not add.";
+      Alert.alert("Add to collection failed", msg);
+    }
+    clearDrag();
+  };
+
+  const onCardDragEnd = (
+    subject: DragSubject,
+    absX: number,
+    absY: number,
+  ) => {
+    const targetId = hitTestCollection(absX, absY);
+    setHighlight(null);
+    if (targetId) {
+      // Fly into the collection: shrink + fade toward the target's center.
+      const b = collectionBounds.current.find((c) => c.id === targetId);
+      if (!b) {
+        // Bounds not measured yet (extremely fast drag): commit directly.
+        commitDrop(subject, targetId);
+        return;
+      }
+      dropAnim.value = withTiming(1, { duration: 240 });
+      dragTx.value = withTiming(b.x + b.w / 2 - overlayWidth / 2, {
+        duration: 240,
+      });
+      dragTy.value = withTiming(b.y + b.h / 2 - 44, { duration: 240 }, () => {
+        runOnJS(commitDrop)(subject, targetId);
+      });
+    } else {
+      // Snap back to the original slot; nothing changes.
+      dragTx.value = withTiming(dragItem?.startX ?? absX, { duration: 220 });
+      dragTy.value = withTiming(dragItem?.startY ?? absY, { duration: 220 }, () => {
+        runOnJS(clearDrag)();
+      });
+    }
+  };
+
+  const dragOverlayStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: dragTx.value },
+      { translateY: dragTy.value },
+      { scale: 1.04 * (1 - dropAnim.value) + 0.2 * dropAnim.value },
+    ],
+    opacity: 1 - dropAnim.value,
+    shadowOpacity: 0.16,
+    elevation: 12,
+  }));
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 100 : insets.bottom + 80;
@@ -306,7 +475,7 @@ export default function LibraryScreen() {
         keyExtractor={(item) =>
           item.kind === "material" ? `material-${item.m.id}` : `note-${item.n.id}`
         }
-        scrollEnabled
+        scrollEnabled={!dragItem}
         keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
@@ -369,18 +538,31 @@ export default function LibraryScreen() {
                   data={collections}
                   keyExtractor={(c) => c.id}
                   horizontal
+                  style={styles.collectionsList}
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.collectionsRow}
                   renderItem={({ item }) => (
-                    <CollectionCard
-                      collection={item}
-                      count={
-                        materialsInCollection(item.id).length +
-                        notesInCollection(item.id).length
-                      }
-                      onPress={() => router.push(`/collection/${item.id}`)}
-                      onLongPress={() => setEditingCollection(item)}
-                    />
+                    <View
+                      ref={(r) => {
+                        if (r) collectionRefs.current.set(item.id, r);
+                        else collectionRefs.current.delete(item.id);
+                      }}
+                      collapsable={false}
+                    >
+                      <CollectionCard
+                        collection={item}
+                        count={
+                          materialsInCollection(item.id).length +
+                          notesInCollection(item.id).length
+                        }
+                        onPress={() => router.push(`/collection/${item.id}`)}
+                        onLongPress={() => setEditingCollection(item)}
+                        highlighted={highlightedId === item.id}
+                        dropPulse={
+                          dropPulse.id === item.id ? dropPulse.count : undefined
+                        }
+                      />
+                    </View>
                   )}
                 />
               </View>
@@ -418,20 +600,110 @@ export default function LibraryScreen() {
         }
         renderItem={({ item }) =>
           item.kind === "material" ? (
-            <MaterialCard
-              material={item.m}
-              sessions={sessions}
-              onPress={() => router.push(`/study/${item.m.id}`)}
-              onMenuPress={() => onMaterialMenu(item.m.id, item.m.title)}
-            />
+            <DraggableCard
+              tx={dragTx}
+              ty={dragTy}
+              dimmed={
+                dragItem?.kind === "material" &&
+                dragItem.m.id === item.m.id
+              }
+              onLongPressStart={onCardLongPressStart}
+              onMenuLongPress={() =>
+                onCardMenuLongPress(() =>
+                  onMaterialMenu(item.m.id, item.m.title),
+                )
+              }
+              onDragBegin={(info) =>
+                onCardDragBegin({ kind: "material", m: item.m }, info)
+              }
+              onDragMove={onCardDragMove}
+              onDragEnd={(x, y) =>
+                onCardDragEnd({ kind: "material", m: item.m }, x, y)
+              }
+            >
+              <MaterialCard
+                material={item.m}
+                sessions={sessions}
+                onPress={() => {
+                  if (suppressTapRef.current) return;
+                  router.push(`/study/${item.m.id}`);
+                }}
+                onMenuPress={() => onMaterialMenu(item.m.id, item.m.title)}
+              />
+            </DraggableCard>
           ) : (
-            <NoteCard
-              note={item.n}
-              onPress={() => router.push(`/note/${item.n.id}`)}
-              onMenuPress={() => onNoteMenu(item.n.id, item.n.title)}
-            />
+            <DraggableCard
+              tx={dragTx}
+              ty={dragTy}
+              dimmed={dragItem?.kind === "note" && dragItem.n.id === item.n.id}
+              onLongPressStart={onCardLongPressStart}
+              onMenuLongPress={() =>
+                onCardMenuLongPress(() => onNoteMenu(item.n.id, item.n.title))
+              }
+              onDragBegin={(info) =>
+                onCardDragBegin({ kind: "note", n: item.n }, info)
+              }
+              onDragMove={onCardDragMove}
+              onDragEnd={(x, y) =>
+                onCardDragEnd({ kind: "note", n: item.n }, x, y)
+              }
+            >
+              <NoteCard
+                note={item.n}
+                onPress={() => {
+                  if (suppressTapRef.current) return;
+                  router.push(`/note/${item.n.id}`);
+                }}
+                onMenuPress={() => onNoteMenu(item.n.id, item.n.title)}
+              />
+            </DraggableCard>
           )
         }
+      />
+
+      {dragItem ? (
+        <View
+          pointerEvents="none"
+          collapsable={false}
+          style={[
+            Platform.OS === "web"
+              ? // Viewport-anchored on web: immune to any ancestor
+                // overflow/transform/contain in the DOM.
+                ({
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                } as unknown as ViewStyle)
+              : StyleSheet.absoluteFill,
+            styles.dragLayer,
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.dragOverlay,
+              { width: overlayWidth, shadowColor: "#000" },
+              dragOverlayStyle,
+            ]}
+          >
+            {dragItem.kind === "note" ? (
+              <NoteCard note={dragItem.n} onPress={() => {}} />
+            ) : (
+              <MaterialCard
+                material={dragItem.m}
+                sessions={sessions}
+                onPress={() => {}}
+              />
+            )}
+          </Animated.View>
+        </View>
+      ) : null}
+
+      <Toast
+        message={toast}
+        onHide={() => setToast(null)}
+        bottomOffset={bottomPad}
       />
 
       <NameInputModal
@@ -735,6 +1007,14 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingRight: 4,
   },
+  // The row is a ScrollView, which clips children to its frame. Grow the
+  // frame vertically so the drop-target highlight (scale + shadow) renders
+  // fully, then cancel the layout shift with negative margins so the idle
+  // page looks exactly the same.
+  collectionsList: {
+    paddingVertical: 20,
+    marginVertical: -20,
+  },
   sectionLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
@@ -746,5 +1026,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingTop: 60,
+  },
+  dragLayer: {
+    zIndex: 40,
+  },
+  dragOverlay: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    zIndex: 50,
+    borderRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
   },
 });

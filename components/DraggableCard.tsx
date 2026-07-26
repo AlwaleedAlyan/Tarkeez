@@ -25,7 +25,10 @@ type Props = {
   ty: SharedValue<number>;
   // Behavior 1: long-press released without crossing the drag threshold.
   onMenuLongPress: () => void;
-  // Behavior 2 lifecycle (all on the JS thread via runOnJS).
+  // Fired the moment the long-press threshold is reached (finger still down).
+  onLongPressStart?: () => void;
+  // Behavior 2 lifecycle (all on the JS thread via runOnJS). Positions are
+  // the pointer's absolute screen coordinates (used for drop hit-testing).
   onDragBegin: (info: DragBeginInfo) => void;
   onDragMove: (absX: number, absY: number) => void;
   onDragEnd: (absX: number, absY: number) => void;
@@ -48,6 +51,7 @@ export function DraggableCard({
   tx,
   ty,
   onMenuLongPress,
+  onLongPressStart,
   onDragBegin,
   onDragMove,
   onDragEnd,
@@ -79,6 +83,7 @@ export function DraggableCard({
     .onStart(() => {
       activated.value = true;
       runOnJS(thresholdHaptic)();
+      if (onLongPressStart) runOnJS(onLongPressStart)();
     })
     .onUpdate((e) => {
       if (!dragging.value) {
@@ -94,15 +99,12 @@ export function DraggableCard({
       }
       tx.value = e.absoluteX - touchDX.value;
       ty.value = e.absoluteY - touchDY.value;
-      runOnJS(onDragMove)(tx.value, ty.value);
+      runOnJS(onDragMove)(e.absoluteX, e.absoluteY);
     })
     .onEnd((e) => {
       ended.value = true;
       if (dragging.value) {
-        runOnJS(onDragEnd)(
-          e.absoluteX - touchDX.value,
-          e.absoluteY - touchDY.value,
-        );
+        runOnJS(onDragEnd)(e.absoluteX, e.absoluteY);
       } else {
         runOnJS(onMenuLongPress)();
       }

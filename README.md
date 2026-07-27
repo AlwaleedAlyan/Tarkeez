@@ -70,3 +70,17 @@ pnpm exec expo start --dev-client
 ## 🏗️ Architecture
 
 Tarkeez follows a strict **Offline-First** pattern. All user actions (mutations) write to the local SQLite database first. Changes queue in a generic outbox engine (`sync_outbox`), and a push worker drains the queue automatically when the app is foregrounded or the network reconnects.
+
+## ⏭️ Deferred: Crash Reporting (Sentry)
+
+Crash reporting was flagged as a pre-launch critical item in the deployment audit (FIX-02 in `DEPLOYMENT_FIXES.md`) and was **intentionally deferred** — the app currently has **no remote crash reporting**; crashes are only visible in device logs. The `ErrorBoundary` (`components/ErrorBoundary.tsx`) already supports an `onError(error, componentStack)` prop, but nothing is wired to it yet.
+
+**When ready to enable:**
+
+1. Create a Sentry project (React Native) at [sentry.io](https://sentry.io) and copy the DSN.
+2. `pnpm exec expo install @sentry/react-native`
+3. Add `EXPO_PUBLIC_SENTRY_DSN=<dsn>` to `.env`.
+4. Create `lib/monitoring.ts` (fail-soft: no-op when the DSN is missing) with `Sentry.init`, an `ErrorUtils` global handler for fatal JS errors, and a `captureException` helper. Add a `lib/monitoring.web.ts` no-op stub so web bundles stay clean.
+5. Wire it up in `app/_layout.tsx`: call `initMonitoring()` at module scope, pass `onError` to `<ErrorBoundary>` (~line 160), and report non-benign unhandled rejections from the existing Hermes rejection tracker.
+6. Rebuild the native apps (`pnpm exec expo run:ios` / `pnpm exec expo run:android`) — `@sentry/react-native` contains native code.
+7. *(Optional)* Add the `@sentry/react-native/expo` plugin to `app.json` for source-map upload.

@@ -9,10 +9,12 @@
   - Public endpoints can burn Gemini/YouTube API quota. Verify caller JWT + add per-user throttling.
   - Est: 2–3 h
   - **Done 2026-07-26.** Code complete; ⚠️ deployment steps below still required.
-- [ ] ⬜ **FIX-02 · Crash reporting (Sentry)** — integrate `@sentry/react-native`, wire `ErrorBoundary.onError` (`app/_layout.tsx:160`), add `ErrorUtils` global handler
+- [ ] ⏭️ **FIX-02 · Crash reporting (Sentry)** — integrate `@sentry/react-native`, wire `ErrorBoundary.onError` (`app/_layout.tsx:160`), add `ErrorUtils` global handler
   - Est: 2–3 h
-- [ ] ⬜ **FIX-03 · Health check endpoint** — add `/health` to `server/serve.js`
+  - **Deferred 2026-07-26 (user decision — no Sentry account yet).** Implementation recipe documented in README → "Deferred: Crash Reporting (Sentry)". Revisit before scaling.
+- [x] ✅ **FIX-03 · Health check endpoint** — add `/health` to `server/serve.js`
   - Est: 15 min
+  - **Done 2026-07-26.** `GET /health` → `200 {"status":"ok","uptime":...}`, `cache-control: no-store`, routed before static fallthrough and works under `BASE_PATH`.
 
 ## 🟡 Warnings (first week post-launch)
 
@@ -48,6 +50,8 @@
 | Date | Fix | Notes |
 |------|-----|-------|
 | 2026-07-26 | FIX-01 | ✅ Complete — see details + deployment steps below |
+| 2026-07-26 | FIX-02 | ⏭️ Deferred — no Sentry account; implementation recipe documented in README |
+| 2026-07-26 | FIX-03 | ✅ Complete — `/health` endpoint added to `server/serve.js` |
 
 ---
 

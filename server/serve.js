@@ -96,6 +96,15 @@ function serveLandingPage(req, res, landingPageTemplate, appName) {
   res.end(html);
 }
 
+function serveHealth(res) {
+  res.writeHead(200, {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    ...CROSS_ORIGIN_HEADERS,
+  });
+  res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+}
+
 function serveStaticFile(urlPath, res) {
   const safePath = path.normalize(urlPath).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = path.join(STATIC_ROOT, safePath);
@@ -131,6 +140,10 @@ const server = http.createServer((req, res) => {
 
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";
+  }
+
+  if (pathname === "/health") {
+    return serveHealth(res);
   }
 
   if (pathname === "/" || pathname === "/manifest") {

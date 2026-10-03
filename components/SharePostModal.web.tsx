@@ -1,15 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import * as MediaLibrary from "expo-media-library";
-import * as Sharing from "expo-sharing";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
   Modal,
-  Platform,
   StyleSheet,
   Switch,
   Text,
@@ -17,7 +13,6 @@ import {
 } from "react-native";
 import { Tappable } from "@/components/Tappable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { captureRef } from "react-native-view-shot";
 
 import { Button } from "@/components/Button";
 import { useColors } from "@/hooks/useColors";
@@ -57,76 +52,20 @@ export function SharePostModal({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const cardRef = useRef<View>(null);
-  const [busy, setBusy] = useState(false);
   const [isTransparentMode, setIsTransparentMode] = useState(false);
 
-  const captureCard = async () => {
-    return captureRef(cardRef, {
-      format: "png",
-      quality: 1,
-      result: "tmpfile",
-    });
-  };
-
   const onShare = async () => {
-    if (Platform.OS === "web") {
-      Alert.alert(
-        "Sharing on the web",
-        "Open Tarkeez on your phone to share or save this post.",
-      );
-      return;
-    }
-    try {
-      setBusy(true);
-      const uri = await captureCard();
-      const ok = await Sharing.isAvailableAsync();
-      if (!ok) {
-        Alert.alert("Sharing isn't available on this device.");
-        return;
-      }
-      await Sharing.shareAsync(uri, {
-        mimeType: "image/png",
-        UTI: "public.png",
-      });
-    } catch (e) {
-      Alert.alert(
-        "Couldn't share",
-        e instanceof Error ? e.message : "Unknown error",
-      );
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert(
+      "Sharing on the web",
+      "Open Tarkeez on your phone to share or save this post.",
+    );
   };
 
   const onSavePhotos = async () => {
-    if (Platform.OS === "web") {
-      Alert.alert(
-        "Photos on the web",
-        "Saving to your camera roll is available on the mobile app.",
-      );
-      return;
-    }
-    try {
-      setBusy(true);
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          "Permission needed",
-          "Tarkeez needs access to your photos to save the post.",
-        );
-        return;
-      }
-      const uri = await captureCard();
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Alert.alert("Saved!", "Your post is in your camera roll.");
-    } catch (e) {
-      Alert.alert(
-        "Couldn't save",
-        e instanceof Error ? e.message : "Unknown error",
-      );
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert(
+      "Photos on the web",
+      "Saving to your camera roll is available on the mobile app.",
+    );
   };
 
   return (
@@ -221,22 +160,14 @@ export function SharePostModal({
             label="Save to photos"
             variant="ghost"
             onPress={onSavePhotos}
-            disabled={busy}
             style={{ flex: 1 }}
           />
           <Button
             label="Share"
             onPress={onShare}
-            disabled={busy}
             style={{ flex: 1 }}
           />
         </View>
-
-        {busy ? (
-          <View style={styles.busyOverlay} pointerEvents="auto">
-            <ActivityIndicator size="large" color="#ffffff" />
-          </View>
-        ) : null}
       </View>
     </Modal>
   );
@@ -361,11 +292,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     paddingTop: 12,
-  },
-  busyOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
   },
 });

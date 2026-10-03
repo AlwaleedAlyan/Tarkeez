@@ -10,10 +10,11 @@ type Db = ExpoSQLiteDatabase<typeof schema>;
 
 function canUseSqliteOnWeb(): boolean {
   if (Platform.OS !== "web") return true;
-  // expo-sqlite's web build needs SharedArrayBuffer for atomics on the
-  // WASM linear memory. Requires COOP/COEP headers (see metro.config.js
-  // and server/serve.js). Without it, openDatabaseSync throws.
-  return typeof SharedArrayBuffer !== "undefined";
+  // Disable expo-sqlite WASM on the web. openDatabaseSync() causes 
+  // [Error: Sync operation timeout] because it spin-locks the main thread 
+  // waiting for the async .wasm download to finish. 
+  // The app will use the robust Supabase fallback implemented in LibraryContext.
+  return false;
 }
 
 let _expoDb: SQLiteDatabase | null = null;

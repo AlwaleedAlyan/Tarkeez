@@ -97,11 +97,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
+      console.log("[Auth] Starting boot...");
       let session = null;
       try {
+        console.log("[Auth] Getting session...");
         const { data } = await supabase.auth.getSession();
+        console.log("[Auth] Session result:", data.session ? "present" : "none");
         session = data.session;
       } catch (err) {
+        console.log("[Auth] Session error:", err);
         if (isRefreshTokenError(err)) {
           // Scrub the bad token from AsyncStorage so the next boot is clean.
           // scope:'local' skips the network round-trip, so this works offline.
@@ -118,14 +122,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       if (session) {
         try {
+          console.log("[Auth] Session found, fetching me...");
           const me = await api<MeResponse>("/auth/me");
+          console.log("[Auth] Me fetched!");
           if (!cancelled) setUser(await toUser(me.user));
-        } catch {
+        } catch (e) {
+          console.log("[Auth] Me fetch failed:", e);
           if (!cancelled) setUser(null);
         }
       } else {
         setUser(null);
       }
+      console.log("[Auth] Boot complete!");
       if (!cancelled) setIsLoading(false);
     })();
 

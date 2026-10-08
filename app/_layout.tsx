@@ -50,6 +50,9 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  useEffect(() => {
+    console.log("[RootLayoutNav] Mounted!");
+  }, []);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
@@ -141,10 +144,11 @@ export default function RootLayout() {
   }, [dbReady]);
 
   useEffect(() => {
+    console.log("[BOOT] state:", { fontsLoaded, fontError, migrationDone, dbBootDone, schemaReady, dbReady, dbError });
     if ((fontsLoaded || fontError) && migrationDone && dbBootDone && schemaReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, migrationDone, dbBootDone, schemaReady]);
+  }, [fontsLoaded, fontError, migrationDone, dbBootDone, schemaReady, dbReady, dbError]);
 
   if (
     (!fontsLoaded && !fontError) ||

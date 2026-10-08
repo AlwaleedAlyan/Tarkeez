@@ -9,8 +9,15 @@ export default function Index() {
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
+    console.log("[Index] isLoading:", isLoading, "user:", !!user);
     if (!isLoading) {
-      router.replace(user ? "/(tabs)" : "/(auth)/login");
+      console.log("[Index] Attempting to route to", user ? "/(tabs)" : "/(auth)/login");
+      try {
+        router.replace(user ? "/(tabs)" : "/(auth)/login");
+        console.log("[Index] Route replaced!");
+      } catch (err) {
+        console.error("[Index] Route error:", err);
+      }
     }
   }, [isLoading, user, router]);
 
